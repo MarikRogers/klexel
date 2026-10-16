@@ -14,7 +14,7 @@ import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
-import { exceedsTapThreshold } from './edit/gestures';
+import { exceedsTapThreshold, appendPathPoint } from './edit/gestures';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
@@ -72,6 +72,8 @@ let color: Color = palette[8];
 let tool: ToolName = 'pen';
 const session = new SelectionSession(() => doc, () => history);
 let selMode: 'replace' | 'add' | 'subtract' = 'replace';
+let selShape: 'rect' | 'lasso' | 'wand' = 'rect';
+let wandAll = false;
 
 // Schwebende Auswahl absetzen (ein Undo-Schritt) und speichern
 function settleSelection(): void {
@@ -97,6 +99,10 @@ const selectionBar = createSelectionBar({
   getSession: () => session,
   getMode: () => selMode,
   setMode: m => { selMode = m; },
+  getShape: () => selShape,
+  setShape: sh => { selShape = sh; },
+  getWandAll: () => wandAll,
+  setWandAll: on => { wandAll = on; },
   getPasteCenter: () => {
     const r = canvas.getBoundingClientRect();
     const [x, y] = view.toDoc(r.width / 2, r.height / 2);
@@ -156,9 +162,10 @@ const local = (e: PointerEvent): [number, number] => {
 // Auswahl-Geste: erst ab TAP_THRESHOLD_PX Bildschirmdistanz Verschieben (Inhalt folgt dem Finger)
 // oder Rechteck aufziehen; darunter ist es ein Tap (Abwählen bzw. nichts).
 let selGesture:
-  | { kind: 'pending'; sx: number; sy: number; x: number; y: number; inside: boolean }
+  | { kind: 'pending'; sx: number; sy: number; x: number; y: number; inside: boolean; path?: Array<[number, number]> }
   | { kind: 'move'; x: number; y: number }
   | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
+  | { kind: 'lasso'; points: Array<[number, number]> }
   | null = null;
 
 function cancelSelGesture(): void {
@@ -167,15 +174,23 @@ function cancelSelGesture(): void {
 
 function selectionDown(sx: number, sy: number, x: number, y: number): void {
   selGesture = { kind: 'pending', sx, sy, x, y, inside: selMode === 'replace' && session.hitTest(x, y) };
+  if (selShape === 'lasso' && !selGesture.inside) selGesture.path = [[x, y]];
 }
 
 function selectionMove(sx: number, sy: number, x: number, y: number): void {
   let g = selGesture; if (!g) return;
   if (g.kind === 'pending') {
+    if (g.path) appendPathPoint(g.path, x, y); // Lasso sammelt ab Pointerdown, zeigt aber erst über der Schwelle
     if (!exceedsTapThreshold(g.sx, g.sy, sx, sy)) return;
-    g = selGesture = g.inside
-      ? { kind: 'move', x: g.x, y: g.y }
-      : { kind: 'rect', x0: g.x, y0: g.y, x1: g.x, y1: g.y };
+    if (g.inside) g = selGesture = { kind: 'move', x: g.x, y: g.y };
+    else if (selShape === 'lasso') g = selGesture = { kind: 'lasso', points: g.path ?? [[g.x, g.y]] };
+    else if (selShape === 'wand') { selGesture = null; return; } // Zauberstab reagiert nur auf Tippen
+    else g = selGesture = { kind: 'rect', x0: g.x, y0: g.y, x1: g.x, y1: g.y };
+  }
+  if (g.kind === 'lasso') {
+    appendPathPoint(g.points, x, y);
+    view.selectionPreview = { kind: 'path', points: g.points };
+    return;
   }
   if (g.kind === 'rect') {
     g.x1 = x; g.y1 = y; view.selectionPreview = { kind: 'rect', x0: g.x0, y0: g.y0, x1: x, y1: y };
@@ -194,7 +209,18 @@ function selectionUp(): void {
   const g = selGesture; selGesture = null; view.selectionPreview = null;
   if (!g) return;
   if (g.kind === 'pending') {
-    if (!g.inside && selMode === 'replace') { session.deselect(); scheduleSave(); }
+    if (g.inside) return;
+    if (selShape === 'wand') {
+      if (g.x < 0 || g.y < 0 || g.x >= doc.width || g.y >= doc.height) return;
+      session.select(Selection.region(doc.width, doc.height, doc.cel(doc.activeId, doc.currentFrameId), g.x, g.y, !wandAll), selMode);
+      scheduleSave();
+    } else if (selMode === 'replace') { session.deselect(); scheduleSave(); }
+    return;
+  }
+  if (g.kind === 'lasso') {
+    if (new Set(g.points.map(([px, py]) => `${px},${py}`)).size < 3) return;
+    session.select(Selection.polygon(doc.width, doc.height, g.points), selMode);
+    scheduleSave();
     return;
   }
   if (g.kind !== 'rect') return;

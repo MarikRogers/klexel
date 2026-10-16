@@ -32,6 +32,10 @@ export const ICON = {
   stop: svg('<rect x="6" y="6" width="12" height="12" rx="1.5"/>'),
   // Auswahl: gestricheltes Rechteck
   select: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/>'),
+  // Lasso: freie Schleife mit kurzem Schwanz
+  lasso: svg('<path d="M12 4C7 4 3.5 6.6 3.5 10s3.5 6 8.5 6 8.5-2.6 8.5-6S17 4 12 4z" stroke-dasharray="3 2.5"/><path d="M9 16c-.5 2-.2 3.4 1.5 4.5"/>'),
+  // Zauberstab: Stab mit Funken
+  wand: svg('<path d="m4 20 10-10"/><path d="m13 7 4 4"/><path d="M18 3v3M16.5 4.5h3"/><path d="M6 5v2.5M4.75 6.25h2.5"/><path d="M19 15v2.5M17.75 16.25h2.5"/>'),
   // Alles auswählen: Rahmen mit gefülltem Kern
   selAll: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/><rect x="8" y="9" width="8" height="6" fill="currentColor" fill-opacity=".4"/>'),
   // Aufheben: Rahmen mit Kreuz

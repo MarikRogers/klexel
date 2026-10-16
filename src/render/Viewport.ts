@@ -13,7 +13,10 @@ export class Viewport {
   /** Nachbarframes als Onion Skin (nur Anzeige, nie exportiert) */
   onion: { prev: Uint32Array | null; next: Uint32Array | null } | null = null;
   selectionOverlay: { edges: SelectionEdge[]; floating: Floating | null } | null = null;
-  selectionPreview: { kind: 'rect'; x0: number; y0: number; x1: number; y1: number } | null = null;
+  selectionPreview:
+    | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
+    | { kind: 'path'; points: Array<[number, number]> }
+    | null = null;
   private floatOff: { pixels: Uint32Array; canvas: HTMLCanvasElement } | null = null;
   private off: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
@@ -164,7 +167,22 @@ export class Viewport {
       outline('#fff', [4, 4]); ctx.stroke();
     }
     const p = this.selectionPreview;
-    if (p) {
+    if (p && p.kind === 'path') {
+      if (p.points.length) {
+        // Pfad in Pixelmitten; dünne Linie zurück zum Startpunkt zeigt das spätere Schließen
+        const at = ([px, py]: [number, number]): [number, number] => [x + (px + .5) * z, y + (py + .5) * z];
+        ctx.beginPath();
+        p.points.forEach((pt, i) => { const [sx, sy] = at(pt); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); });
+        outline('#000', []); ctx.stroke();
+        outline('#fff', [4, 4]); ctx.stroke();
+        if (p.points.length > 2) {
+          const [ex, ey] = at(p.points[p.points.length - 1]), [bx, by] = at(p.points[0]);
+          ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(bx, by);
+          ctx.globalAlpha = 0.5; outline('#000', []); ctx.stroke(); outline('#fff', [4, 4]); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+    } else if (p) {
       const rx = x + Math.min(p.x0, p.x1) * z + .5, ry = y + Math.min(p.y0, p.y1) * z + .5;
       const rw = (Math.abs(p.x1 - p.x0) + 1) * z, rh = (Math.abs(p.y1 - p.y0) + 1) * z;
       outline('#000', []); ctx.strokeRect(rx, ry, rw, rh);

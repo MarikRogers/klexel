@@ -3,11 +3,16 @@ import { ICON } from './icons';
 import { showToast } from './toast';
 
 type Mode = 'replace' | 'add' | 'subtract';
+type Shape = 'rect' | 'lasso' | 'wand';
 
 export interface SelectionBarDeps {
   getSession(): SelectionSession;
   getMode(): Mode;
   setMode(m: Mode): void;
+  getShape(): Shape;
+  setShape(s: Shape): void;
+  getWandAll(): boolean;
+  setWandAll(on: boolean): void;
   getPasteCenter(): [number, number];
   onChange(): void;
 }
@@ -17,6 +22,12 @@ export interface SelectionBar {
   setVisible(v: boolean): void;
   refresh(): void;
 }
+
+const SHAPES: Array<[Shape, string, string]> = [
+  ['rect', ICON.select, 'Rechteck'],
+  ['lasso', ICON.lasso, 'Lasso'],
+  ['wand', ICON.wand, 'Zauberstab'],
+];
 
 const MODES: Array<[Mode, string, string]> = [
   ['replace', 'Neu', 'Neue Auswahl'],
@@ -31,9 +42,16 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
   const btn = (act: string, label: string, icon: string, extra = '') =>
     `<button data-act="${act}" title="${label}" aria-label="${label}"${extra}>${icon}</button>`;
   el.innerHTML = `
+    <div class="selbar-row">
+    <div class="selbar-group selbar-shapes" role="group" aria-label="Auswahlform">
+      ${SHAPES.map(([sh, icon, label]) =>
+        `<button data-shape="${sh}" title="${label}" aria-label="${label}">${icon}</button>`).join('')}
+    </div>
     <div class="selbar-group selbar-modes" role="group" aria-label="Auswahlmodus">
       ${MODES.map(([m, text, label]) =>
         `<button data-mode="${m}" title="${label}" aria-label="${label}">${text}</button>`).join('')}
+    </div>
+    <button data-wandall title="Alle Farben" aria-label="Alle Farben" class="selbar-wandall" hidden>Alle<br>Farben</button>
     </div>
     <div class="selbar-group selbar-actions">
       ${btn('all', 'Alles auswählen', ICON.selAll)}
@@ -49,6 +67,8 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
     </div>`;
 
   const act = (name: string) => el.querySelector<HTMLButtonElement>(`[data-act=${name}]`)!;
+  const shapeBtns = [...el.querySelectorAll<HTMLButtonElement>('[data-shape]')];
+  const wandAllBtn = el.querySelector<HTMLButtonElement>('[data-wandall]')!;
   const modeBtns = [...el.querySelectorAll<HTMLButtonElement>('[data-mode]')];
 
   const warn = (r: LiftResult) => {
@@ -73,7 +93,13 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!b || b.disabled) return;
     const session = deps.getSession();
-    if (b.dataset.mode) {
+    if (b.dataset.shape) {
+      session.commit();
+      deps.setShape(b.dataset.shape as Shape);
+    } else if (b.hasAttribute('data-wandall')) {
+      session.commit();
+      deps.setWandAll(!deps.getWandAll());
+    } else if (b.dataset.mode) {
       session.commit();
       deps.setMode(b.dataset.mode as Mode);
     } else if (b.dataset.act) {
@@ -85,6 +111,15 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
   function refresh(): void {
     const s = deps.getSession();
     const mode = deps.getMode();
+    const shape = deps.getShape();
+    shapeBtns.forEach(b => {
+      const on = b.dataset.shape === shape;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    wandAllBtn.hidden = shape !== 'wand';
+    wandAllBtn.classList.toggle('active', deps.getWandAll());
+    wandAllBtn.setAttribute('aria-pressed', String(deps.getWandAll()));
     modeBtns.forEach(b => {
       const on = b.dataset.mode === mode;
       b.classList.toggle('active', on);
@@ -94,7 +129,11 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
       act(name).disabled = !s.hasSelection;
     }
     act('paste').disabled = !s.clip;
-    act('commit').hidden = !s.isFloating;
+    const commit = act('commit');
+    const wasHidden = commit.hidden;
+    commit.hidden = !s.isFloating;
+    // Hochformat: die Aktionszeile scrollt; ✓ soll beim Erscheinen sichtbar sein
+    if (wasHidden && !commit.hidden) commit.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   document.getElementById('app')!.insertBefore(el, document.getElementById('bottom'));
