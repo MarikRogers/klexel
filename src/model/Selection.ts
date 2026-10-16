@@ -36,6 +36,19 @@ export class Selection {
     return new Selection(w, h, mask);
   }
 
+  // Maske einer w×h-Box (z. B. schwebender Inhalt) an Position (x, y), auf die Fläche abgeschnitten
+  static fromBox(width: number, height: number, box: Uint8Array, w: number, h: number, x: number, y: number): Selection {
+    const mask = new Uint8Array(width * height);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        const tx = x + c;
+        const ty = y + r;
+        if (box[r * w + c] === 1 && tx >= 0 && ty >= 0 && tx < width && ty < height) mask[ty * width + tx] = 1;
+      }
+    }
+    return new Selection(width, height, mask);
+  }
+
   combine(other: Selection, mode: SelectionMode): Selection {
     if (other.width !== this.width || other.height !== this.height) {
       throw new RangeError('Selection sizes differ');
