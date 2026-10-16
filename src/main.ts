@@ -25,14 +25,15 @@ type ShapeTool = 'line' | 'rect' | 'ellipse';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <div id="top">
-    <div class="row">
+    <div class="brand"><img src="./favicon.png" alt="" width="32" height="32" /><span>Klexel</span></div>
+    <div class="row row-edit">
       <button id="undo" title="Rückgängig">↶</button>
       <button id="redo" title="Wiederholen">↷</button>
       <button id="grid" class="active" title="Raster">▦</button>
       <button id="layersBtn" title="Ebenen">${ICON.layers}</button>
       <button id="framesBtn" title="Frames">${ICON.frames}</button>
     </div>
-    <div class="row">
+    <div class="row row-file">
       <button id="new" title="Neu">＋</button>
       <button id="import" title="PNG laden">⤒</button>
       <button id="export" title="PNG speichern">⤓</button>
