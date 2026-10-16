@@ -22,7 +22,13 @@ async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
 }
 
 export async function saveState(doc: PixelDocument, palette: number[], color: number): Promise<void> {
-  await kv('readwrite', st => st.put(serializeState(doc, palette, color), 'current'));
+  const db = await open();
+  // Kein await zwischen Serialisieren und put: put klont synchron, das ist die einzige Kopie
+  const req = db.transaction(STORE, 'readwrite').objectStore(STORE).put(serializeState(doc, palette, color, { copy: false }), 'current');
+  await new Promise<void>((res, rej) => {
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
 }
 
 export async function loadState(): Promise<{ doc: PixelDocument; palette: number[]; color: number } | null> {

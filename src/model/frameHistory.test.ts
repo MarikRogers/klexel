@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PixelDocument, MAX_FRAMES, MAX_LAYERS } from './Document';
+import { PixelDocument, MAX_FRAMES, MAX_LAYERS, layerActions } from './Document';
 import { History } from './History';
 
 function setup(w = 4, h = 4) {
@@ -237,5 +237,44 @@ describe('Grenzen', () => {
     while (h.undo()) n++;
     expect(n).toBe(100);
     expect(doc.frames.length).toBeGreaterThan(1);
+  });
+});
+
+describe('Speicherbudget', () => {
+  it('lehnt Ebenen ab, wenn das Budget (nicht MAX_LAYERS) sie verbietet', () => {
+    const doc = new PixelDocument(128, 128);
+    const h = new History(doc);
+    for (let i = 1; i < 64; i++) doc.insertFrame({ id: doc.nextFrameId++ }, doc.frames.length);
+    expect(doc.frames.length).toBe(64);
+    for (let i = 1; i < 15; i++) doc.insertLayer(doc.createLayer(), doc.layers.length);
+    expect(doc.layers.length).toBe(15);
+    expect(doc.layers.length).toBeLessThan(MAX_LAYERS);
+    const a = layerActions(doc);
+    expect(a.canAdd).toBe(false);
+    expect(a.canDuplicate).toBe(false);
+    const undoBefore = h.canUndo;
+    expect(h.addLayer()).toBeNull();
+    expect(h.duplicateLayer()).toBeNull();
+    expect(h.canUndo).toBe(undoBefore);
+    expect(doc.layers.length).toBe(15);
+  });
+
+  it('fitsBudget(0, 1) gilt bei 60 Frames für ein kleines 16-Ebenen-Dokument', () => {
+    const doc = new PixelDocument(8, 8);
+    for (let i = 1; i < 16; i++) doc.insertLayer(doc.createLayer(), doc.layers.length);
+    for (let i = 1; i < 60; i++) doc.insertFrame({ id: doc.nextFrameId++ }, doc.frames.length);
+    expect(doc.frames.length).toBe(60);
+    expect(doc.fitsBudget(0, 1)).toBe(true);
+  });
+});
+
+describe('insertFrame und Composite-Cache', () => {
+  it('lässt die Composites der anderen Frames im Cache', () => {
+    const doc = new PixelDocument(4, 4);
+    doc.insertFrame({ id: doc.nextFrameId++ }, 1);
+    const before = doc.frames.map((f) => doc.compositeFrame(f.id));
+    doc.insertFrame({ id: doc.nextFrameId++ }, 1);
+    expect(doc.compositeFrame(doc.frames[0].id)).toBe(before[0]);
+    expect(doc.compositeFrame(doc.frames[2].id)).toBe(before[1]);
   });
 });

@@ -18,7 +18,8 @@ export interface SavedState {
   color: number;
 }
 
-export function serializeState(doc: PixelDocument, palette: number[], color: number): SavedState {
+export function serializeState(doc: PixelDocument, palette: number[], color: number, opts: { copy?: boolean } = {}): SavedState {
+  const copy = opts.copy !== false;
   return {
     version: 3,
     width: doc.width,
@@ -28,7 +29,7 @@ export function serializeState(doc: PixelDocument, palette: number[], color: num
     nextFrameId: doc.nextFrameId,
     layers: doc.layers.map((l) => {
       const cels: Record<string, Uint32Array> = {};
-      for (const [fid, cel] of l.cels) cels[String(fid)] = cel.slice();
+      for (const [fid, cel] of l.cels) cels[String(fid)] = copy ? cel.slice() : cel;
       return { id: l.id, name: l.name, visible: l.visible, locked: l.locked, opacity: l.opacity, cels };
     }),
     activeId: doc.activeId,

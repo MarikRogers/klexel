@@ -93,6 +93,8 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
   let playLast = 0;
   let playAcc = 0;
   let colsDirty = false;
+  let previewImg: ImageData | null = null;
+  let shownIndex = -1;
 
   const doc = () => deps.getDoc();
   const history = () => deps.getHistory();
@@ -108,7 +110,8 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
   function drawPreview(d: PixelDocument, frameId: number): void {
     if (preview.width !== d.width || preview.height !== d.height) { preview.width = d.width; preview.height = d.height; }
     const ctx = preview.getContext('2d')!;
-    const img = ctx.createImageData(d.width, d.height);
+    if (!previewImg || previewImg.width !== d.width || previewImg.height !== d.height) previewImg = ctx.createImageData(d.width, d.height);
+    const img = previewImg;
     const px = d.compositeFrame(frameId);
     for (let i = 0; i < px.length; i++) {
       const c = px[i];
@@ -143,7 +146,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     playAcc = playAcc % dt;
     for (let i = 0; i < steps; i++) playIndex = nextPlaybackIndex(playIndex, d.frames.length);
     if (playIndex >= d.frames.length) playIndex = 0;
-    drawPreview(d, d.frames[playIndex].id);
+    if (playIndex !== shownIndex) { shownIndex = playIndex; drawPreview(d, d.frames[playIndex].id); }
     playRaf = requestAnimationFrame(playStep);
   }
 
@@ -152,7 +155,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     if (playing || d.frames.length < 2) return;
     playing = true;
     playIndex = d.frameIndex(d.currentFrameId);
-    playLast = performance.now(); playAcc = 0;
+    playLast = performance.now(); playAcc = 0; shownIndex = -1;
     setPlayLabel();
     playRaf = requestAnimationFrame(playStep);
   }
@@ -180,7 +183,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
 
   async function exportWith(job: () => Promise<void>): Promise<void> {
     sheetBtn.disabled = zipBtn.disabled = true;
-    try { await job(); } catch { showToast('Export fehlgeschlagen'); } finally { sheetBtn.disabled = zipBtn.disabled = false; }
+    try { await job(); } catch (err) { console.error(err); showToast('Export fehlgeschlagen'); } finally { sheetBtn.disabled = zipBtn.disabled = false; }
   }
 
   playBtn.onclick = () => { if (playing) stopPlayback(); else startPlayback(); };
@@ -244,6 +247,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
         const cur = doc();
         const tile = strip.querySelector('.frame-tile.active');
         if (tile) drawTile(tile, cur, cur.currentFrameId);
+        if (!playing) drawPreview(cur, cur.currentFrameId);
       });
     }
     const a = frameActions(d);

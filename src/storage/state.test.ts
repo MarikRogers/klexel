@@ -75,6 +75,15 @@ describe('state', () => {
     expect(empty.layers[0].cels).toEqual({});
   });
 
+  it('serializeState mit copy:false liefert die lebenden Arrays, Standard kopiert', () => {
+    const doc = new PixelDocument(2, 2);
+    doc.set(0, 0, 5);
+    const live = serializeState(doc, [1], 1, { copy: false });
+    expect(live.layers[0].cels['1']).toBe(doc.layers[0].cels.get(1));
+    const copied = serializeState(doc, [1], 1);
+    expect(copied.layers[0].cels['1']).not.toBe(doc.layers[0].cels.get(1));
+  });
+
   it('Migration v2', () => {
     const s = validRaw();
     s.layers[1].data[2] = 9;

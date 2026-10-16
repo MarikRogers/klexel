@@ -152,7 +152,7 @@ export class PixelDocument {
     if (this.frames.length >= MAX_FRAMES) throw new RangeError(`Höchstens ${MAX_FRAMES} Frames`);
     if (!this.fitsBudget(0, 1)) throw new RangeError('Speicherbudget überschritten');
     this.frames.splice(Math.max(0, Math.min(index, this.frames.length)), 0, frame);
-    this.touch();
+    this.touch(frame.id);
   }
 
   removeFrame(id: number): { frame: Frame; index: number; cels: Map<number, Uint32Array | undefined> } {
