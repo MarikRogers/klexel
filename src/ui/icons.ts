@@ -30,6 +30,8 @@ export const ICON = {
   right: svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
   play: svg('<path d="M7 4.5v15l12-7.5z"/>'),
   stop: svg('<rect x="6" y="6" width="12" height="12" rx="1.5"/>'),
+  // Auswahl: gestricheltes Rechteck
+  select: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/>'),
   // Onion Skin: zwei versetzte Kreise
   onion: svg('<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6" stroke-dasharray="2 2"/>'),
 };

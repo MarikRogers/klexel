@@ -11,10 +11,12 @@ import { showToast } from './ui/toast';
 import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
 import { createFramesPanel } from './ui/framesPanel';
+import { Selection } from './model/Selection';
+import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
-type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
+type ToolName = 'select' | 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
 type ShapeTool = 'line' | 'rect' | 'ellipse';
 
 const app = document.getElementById('app')!;
@@ -36,6 +38,7 @@ app.innerHTML = `
   <div id="stage"><canvas></canvas><button id="toggle" title="Leisten ein-/ausblenden">☰</button></div>
   <div id="bottom">
     <div class="row" id="tools">
+      <button data-tool="select" title="Auswahl">${ICON.select}</button>
       <button data-tool="pen" class="active" title="Stift">✎</button>
       <button data-tool="eraser" title="Radierer">${ICON.eraser}</button>
       <button data-tool="fill" title="Füllen">${ICON.fill}</button>
@@ -65,22 +68,31 @@ let view = new Viewport(canvas, doc);
 let palette: Color[] = [...PICO8];
 let color: Color = palette[8];
 let tool: ToolName = 'pen';
+const session = new SelectionSession(() => doc, () => history);
+let selMode: 'replace' | 'add' | 'subtract' = 'replace';
+
+// Schwebende Auswahl absetzen (ein Undo-Schritt) und speichern
+function settleSelection(): void {
+  if (!session.isFloating) return;
+  session.commit(); scheduleSave();
+}
 
 const panel = createLayersPanel({
   getDoc: () => doc,
   getHistory: () => history,
   onChange: () => { refresh(); scheduleSave(); },
-  discardStroke: () => { endStroke(false); cancelShape(); },
+  discardStroke: () => { settleSelection(); endStroke(false); cancelShape(); },
 });
 
 const framesPanel = createFramesPanel({
   getDoc: () => doc,
   getHistory: () => history,
   onChange: () => { refresh(); scheduleSave(); },
-  discardStroke: () => { endStroke(false); cancelShape(); },
+  discardStroke: () => { settleSelection(); endStroke(false); cancelShape(); },
 });
 
 function attach(newDoc: PixelDocument): void {
+  session.reset(); selGesture = null;
   shapeStart = shapeEnd = null;
   panel.close();
   framesPanel.close();
@@ -92,9 +104,10 @@ function attach(newDoc: PixelDocument): void {
 
 function refresh(): void {
   view.onion = onionFrames(doc);
+  view.selectionOverlay = session.selection ? { edges: session.selection.edges(), floating: session.floating } : null;
   view.render();
-  $<HTMLButtonElement>('undo').disabled = !history.canUndo;
-  $<HTMLButtonElement>('redo').disabled = !history.canRedo;
+  $<HTMLButtonElement>('undo').disabled = !history.canUndo && !session.isFloating;
+  $<HTMLButtonElement>('redo').disabled = !history.canRedo || session.isFloating;
   panel.refresh();
   framesPanel.refresh();
 }
@@ -102,7 +115,7 @@ function refresh(): void {
 let saveTimer = 0;
 function scheduleSave(): void {
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => { void saveState(doc, palette, color); }, 500);
+  saveTimer = window.setTimeout(() => { if (!session.isFloating) void saveState(doc, palette, color); }, 500);
 }
 
 function renderSwatches(): void {
@@ -125,6 +138,47 @@ let gesture: { dist: number; cx: number; cy: number; zoom: number } | null = nul
 const local = (e: PointerEvent): [number, number] => {
   const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top];
 };
+// Auswahl-Geste: Verschieben (Inhalt folgt dem Finger) oder Rechteck aufziehen
+let selGesture:
+  | { kind: 'move'; x: number; y: number }
+  | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
+  | null = null;
+
+function cancelSelGesture(): void {
+  selGesture = null; view.selectionPreview = null;
+}
+
+function selectionDown(x: number, y: number): void {
+  if (selMode === 'replace' && session.hitTest(x, y)) selGesture = { kind: 'move', x, y };
+  else {
+    selGesture = { kind: 'rect', x0: x, y0: y, x1: x, y1: y };
+    view.selectionPreview = { kind: 'rect', x0: x, y0: y, x1: x, y1: y };
+  }
+}
+
+function selectionMove(x: number, y: number): void {
+  const g = selGesture; if (!g) return;
+  if (g.kind === 'rect') {
+    g.x1 = x; g.y1 = y; view.selectionPreview = { kind: 'rect', x0: g.x0, y0: g.y0, x1: x, y1: y };
+    return;
+  }
+  const dx = x - g.x, dy = y - g.y;
+  if (!dx && !dy) return;
+  const r = session.moveBy(dx, dy);
+  if (r === 'locked' || r === 'hidden') {
+    showToast(r === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet'); selGesture = null; return;
+  }
+  g.x = x; g.y = y;
+}
+
+function selectionUp(): void {
+  const g = selGesture; selGesture = null; view.selectionPreview = null;
+  if (g?.kind !== 'rect') return;
+  if (g.x0 !== g.x1 || g.y0 !== g.y1) session.select(Selection.rect(doc.width, doc.height, g.x0, g.y0, g.x1, g.y1), selMode);
+  else if (selMode === 'replace') session.deselect();
+  scheduleSave();
+}
+
 const paintColor = () => (tool === 'eraser' ? 0 : color);
 
 // ---- Formen: Vorschau beim Ziehen, ein Undo-Schritt beim Loslassen ----
@@ -179,13 +233,14 @@ canvas.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: cx, y: cy });
   if (pointers.size === 2) {
     endStroke(false); // zweiter Finger: laufenden Strich bzw. Form verwerfen
-    cancelShape();
+    cancelShape(); cancelSelGesture();
     const [a, b] = [...pointers.values()];
     gesture = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, zoom: view.zoom };
     refresh(); return;
   }
   if (pointers.size > 2) return;
   const [x, y] = view.toDoc(cx, cy);
+  if (tool === 'select') { selectionDown(x, y); refresh(); return; }
   if (tool === 'picker') {
     const c = doc.getComposite(x, y);
     if (c) { color = c; renderSwatches(); }
@@ -215,6 +270,7 @@ canvas.addEventListener('pointermove', e => {
     gesture.cx = mx; gesture.cy = my; gesture.zoom = view.zoom; gesture.dist = dist;
     refresh(); return;
   }
+  if (selGesture) { const [x, y] = view.toDoc(cx, cy); selectionMove(x, y); refresh(); return; }
   if (shapeStart) {
     shapeEnd = view.toDoc(cx, cy); updateShapePreview(); refresh(); return;
   }
@@ -226,11 +282,12 @@ canvas.addEventListener('pointermove', e => {
 function release(e: PointerEvent): void {
   if (!pointers.delete(e.pointerId)) return;
   if (pointers.size < 2) gesture = null;
+  if (selGesture) { selectionUp(); refresh(); return; }
   if (shapeStart) { commitShape(); refresh(); return; }
   if (drawing) { endStroke(true); scheduleSave(); refresh(); }
 }
 canvas.addEventListener('pointerup', release);
-canvas.addEventListener('pointercancel', e => { endStroke(false); cancelShape(); release(e); refresh(); });
+canvas.addEventListener('pointercancel', e => { endStroke(false); cancelShape(); cancelSelGesture(); release(e); refresh(); });
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   view.zoomAt(e.offsetX, e.offsetY, view.zoom + (e.deltaY < 0 ? 1 : -1)); refresh();
@@ -240,7 +297,10 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 // ---- Buttons ----
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => {
   b.onclick = () => {
-    cancelShape();
+    const next = b.dataset.tool as ToolName;
+    settleSelection();
+    if (tool === 'select' && next !== 'select') { session.deselect(); cancelSelGesture(); }
+    endStroke(false); cancelShape();
     tool = b.dataset.tool as ToolName;
     document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
     $('fillMode').hidden = !(tool === 'rect' || tool === 'ellipse');
@@ -252,7 +312,9 @@ $('fillMode').onclick = e => {
   (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';
   (e.currentTarget as HTMLElement).classList.toggle('active', filledShapes);
 };
-$('undo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+$('undo').onclick = () => {
+  if (undoAction(session) === 'cancel') { session.cancel(); refresh(); scheduleSave(); return; }
+  endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
 $('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
 $('layersBtn').onclick = () => { framesPanel.close(); panel.toggle(); refresh(); };
 $('framesBtn').onclick = () => { panel.close(); framesPanel.toggle(); refresh(); };
@@ -263,23 +325,27 @@ $<HTMLInputElement>('colorInput').onchange = e => {
   if (!palette.includes(color)) palette = [color, ...palette.slice(0, 15)];
   renderSwatches(); scheduleSave();
 };
-$('new').onclick = () => $<HTMLDialogElement>('newDlg').showModal();
+$('new').onclick = () => { settleSelection(); $<HTMLDialogElement>('newDlg').showModal(); };
 $<HTMLDialogElement>('newDlg').addEventListener('close', function (this: HTMLDialogElement) {
   if (this.returnValue !== 'ok') return;
   const w = Math.round(+$<HTMLInputElement>('nw').value), h = Math.round(+$<HTMLInputElement>('nh').value);
   try { attach(new PixelDocument(w, h)); scheduleSave(); } catch { alert('Größe muss zwischen 1 und 128 liegen.'); }
 });
 $('export').onclick = async () => {
+  settleSelection();
   const scale = Math.max(1, Math.floor(512 / Math.max(doc.width, doc.height)));
   await saveBlob(await exportPng(doc, scale), 'pixelart.png', 'image/png');
 };
-$('import').onclick = () => $('file').click();
+$('import').onclick = () => { settleSelection(); $('file').click(); };
 $<HTMLInputElement>('file').onchange = async e => {
   const input = e.target as HTMLInputElement;
   const f = input.files?.[0]; if (!f) return;
   try { attach(await importPng(f)); scheduleSave(); } catch (err) { alert((err as Error).message); }
   input.value = '';
 };
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { session.commit(); scheduleSave(); refresh(); }
+});
 window.addEventListener('resize', () => { view.fit(); refresh(); });
 
 // Leisten einklappen (Zustand bleibt erhalten); danach Ansicht neu einpassen

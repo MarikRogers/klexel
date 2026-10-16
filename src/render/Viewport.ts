@@ -1,5 +1,7 @@
 import { PixelDocument, Color } from '../model/Document';
 import { toCss } from '../palette/palettes';
+import type { SelectionEdge } from '../model/Selection';
+import type { Floating } from '../edit/SelectionSession';
 
 export class Viewport {
   zoom = 8;       // Bildschirmpixel pro Dokumentpixel
@@ -9,6 +11,9 @@ export class Viewport {
   preview: { points: Array<[number, number]>; color: Color } | null = null;
   /** Nachbarframes als Onion Skin (nur Anzeige, nie exportiert) */
   onion: { prev: Uint32Array | null; next: Uint32Array | null } | null = null;
+  selectionOverlay: { edges: SelectionEdge[]; floating: Floating | null } | null = null;
+  selectionPreview: { kind: 'rect'; x0: number; y0: number; x1: number; y1: number } | null = null;
+  private floatOff: { pixels: Uint32Array; canvas: HTMLCanvasElement } | null = null;
   private off: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
   private img: ImageData;
@@ -105,6 +110,56 @@ export class Viewport {
       }
       ctx.globalAlpha = 1;
     }
+    this.drawSelection(ctx, x, y);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.strokeRect(x - .5, y - .5, W + 1, H + 1);
+  }
+
+  /** Schwebende Pixel (nur aus dem Cache neu gebaut, wenn sie sich ändern) */
+  private floatCanvas(f: Floating): HTMLCanvasElement {
+    if (!this.floatOff || this.floatOff.pixels !== f.pixels) {
+      const canvas = document.createElement('canvas');
+      canvas.width = f.w; canvas.height = f.h;
+      const ctx = canvas.getContext('2d')!;
+      const img = ctx.createImageData(f.w, f.h);
+      for (let i = 0; i < f.w * f.h; i++) {
+        const c = f.pixels[i];
+        if (f.mask[i] === 0 || (c & 255) === 0) continue;
+        img.data[i * 4] = c >>> 24; img.data[i * 4 + 1] = (c >>> 16) & 255;
+        img.data[i * 4 + 2] = (c >>> 8) & 255; img.data[i * 4 + 3] = c & 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      this.floatOff = { pixels: f.pixels, canvas };
+    }
+    return this.floatOff.canvas;
+  }
+
+  private drawSelection(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const z = this.zoom;
+    const ov = this.selectionOverlay;
+    if (ov?.floating) {
+      const f = ov.floating;
+      ctx.drawImage(this.floatCanvas(f), x + f.x * z, y + f.y * z, f.w * z, f.h * z);
+    }
+    const outline = (stroke: string, dash: number[]) => {
+      ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.setLineDash(dash);
+    };
+    if (ov && ov.edges.length) {
+      ctx.beginPath();
+      for (const e of ov.edges) {
+        const sx = x + e.x * z + .5, sy = y + e.y * z + .5;
+        ctx.moveTo(sx, sy);
+        if (e.dir === 'h') ctx.lineTo(sx + z, sy); else ctx.lineTo(sx, sy + z);
+      }
+      outline('#000', []); ctx.stroke();
+      outline('#fff', [4, 4]); ctx.stroke();
+    }
+    const p = this.selectionPreview;
+    if (p) {
+      const rx = x + Math.min(p.x0, p.x1) * z + .5, ry = y + Math.min(p.y0, p.y1) * z + .5;
+      const rw = (Math.abs(p.x1 - p.x0) + 1) * z, rh = (Math.abs(p.y1 - p.y0) + 1) * z;
+      outline('#000', []); ctx.strokeRect(rx, ry, rw, rh);
+      outline('#fff', [4, 4]); ctx.strokeRect(rx, ry, rw, rh);
+    }
+    ctx.setLineDash([]);
   }
 }
