@@ -7,21 +7,12 @@ import { floodFill } from './tools/fill';
 import { rectPoints, ellipsePoints } from './tools/shapes';
 import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
 import { showToast } from './ui/toast';
+import { ICON } from './ui/icons';
+import { createLayersPanel } from './ui/layersPanel';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
 type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
 type ShapeTool = 'line' | 'rect' | 'ellipse';
-
-const svg = (body: string) =>
-  `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-const ICON = {
-  // Radiergummi: schräger Block, Gummiteil gefüllt
-  eraser: svg('<g transform="rotate(-45 12 12)"><rect x="3" y="8" width="18" height="8" rx="2"/><rect x="11" y="8" width="10" height="8" rx="2" fill="currentColor" fill-opacity=".4"/></g>'),
-  // Farbeimer: gekippter Eimer mit Farbtropfen
-  fill: svg('<path d="M4.5 12 11 5.5l7 7-5.6 5.6a2 2 0 0 1-2.8 0L4.5 14.8a2 2 0 0 1 0-2.8z"/><path d="M5 12h12.5"/><path d="M20.5 15.5c1 1.4 1.5 2.3 1.5 3a1.5 1.5 0 0 1-3 0c0-.7.5-1.6 1.5-3z" fill="currentColor"/>'),
-  // Pipette: Gummihütchen oben rechts, Spitze unten links
-  picker: svg('<path d="M15.5 3.5a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3l-2 2-4-4z"/><path d="m13.5 7.5 3 3-8 8h-3v-3z"/><path d="m5.5 18.5-1.5 1.5"/>'),
-};
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -30,6 +21,7 @@ app.innerHTML = `
       <button id="undo" title="Rückgängig">↶</button>
       <button id="redo" title="Wiederholen">↷</button>
       <button id="grid" class="active" title="Raster">▦</button>
+      <button id="layersBtn" title="Ebenen">${ICON.layers}</button>
     </div>
     <div class="row">
       <button id="new" title="Neu">＋</button>
@@ -70,8 +62,16 @@ let palette: Color[] = [...PICO8];
 let color: Color = palette[8];
 let tool: ToolName = 'pen';
 
+const panel = createLayersPanel({
+  getDoc: () => doc,
+  getHistory: () => history,
+  onChange: () => { refresh(); scheduleSave(); },
+  discardStroke: () => { endStroke(false); cancelShape(); },
+});
+
 function attach(newDoc: PixelDocument): void {
   shapeStart = shapeEnd = null;
+  panel.close();
   doc = newDoc; history = new History(doc); view = new Viewport(canvas, doc);
   view.fit(); refresh();
 }
@@ -80,6 +80,7 @@ function refresh(): void {
   view.render();
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
+  panel.refresh();
 }
 
 let saveTimer = 0;
@@ -235,8 +236,9 @@ $('fillMode').onclick = e => {
   (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';
   (e.currentTarget as HTMLElement).classList.toggle('active', filledShapes);
 };
-$('undo').onclick = () => { history.undo(); refresh(); scheduleSave(); };
-$('redo').onclick = () => { history.redo(); refresh(); scheduleSave(); };
+$('undo').onclick = () => { history.commitProps(); history.undo(); refresh(); scheduleSave(); };
+$('redo').onclick = () => { history.commitProps(); history.redo(); refresh(); scheduleSave(); };
+$('layersBtn').onclick = () => panel.toggle();
 $('grid').onclick = e => { view.showGrid = !view.showGrid; (e.currentTarget as HTMLElement).classList.toggle('active', view.showGrid); refresh(); };
 $('custom').onclick = () => { const i = $<HTMLInputElement>('colorInput'); i.value = toHex(color); i.click(); };
 $<HTMLInputElement>('colorInput').onchange = e => {
