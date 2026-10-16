@@ -101,10 +101,10 @@ export class PixelDocument {
     if (!layerIds.has(state.activeId)) throw new RangeError('Aktive Ebene unbekannt');
     if (width * height * layers.length * frames.length > MAX_PIXELS) throw new RangeError('Speicherbudget überschritten');
     const doc = new PixelDocument(width, height);
-    doc.layers = layers;
+    doc.layers = [...layers];
     doc.activeId = state.activeId;
     doc.nextId = state.nextId;
-    doc.frames = frames;
+    doc.frames = frames.map((f) => ({ ...f }));
     doc.currentFrameId = state.currentFrameId;
     doc.nextFrameId = Math.max(state.nextFrameId, Math.max(...frames.map((f) => f.id)) + 1);
     if (state.fps !== undefined) doc.fps = state.fps;

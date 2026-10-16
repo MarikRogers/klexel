@@ -76,4 +76,13 @@ describe('state', () => {
     s.nextId = 2;
     expect(parseState(s)!.doc.nextId).toBe(8);
   });
+
+  it('parseState-Ergebnisse teilen keine frames', () => {
+    const a = parseState(validRaw())!.doc;
+    const b = parseState(validRaw())!.doc;
+    expect(a.frames).not.toBe(b.frames);
+    a.insertFrame(a.createFrame(), 1);
+    expect(b.frames).toEqual([{ id: 1 }]);
+    expect(parseState(validRaw())!.doc.frames).toEqual([{ id: 1 }]);
+  });
 });

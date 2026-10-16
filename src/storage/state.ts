@@ -33,7 +33,7 @@ export function serializeState(doc: PixelDocument, palette: number[], color: num
   };
 }
 
-const ONE_FRAME = { frames: [{ id: 1 }], currentFrameId: 1, nextFrameId: 2 };
+const oneFrame = () => ({ frames: [{ id: 1 }], currentFrameId: 1, nextFrameId: 2 });
 
 function isSize(n: unknown): n is number {
   return Number.isInteger(n) && (n as number) >= 1 && (n as number) <= MAX_SIZE;
@@ -64,7 +64,7 @@ export function parseState(raw: unknown): { doc: PixelDocument; palette: number[
     if (s.version === undefined) {
       if (!(s.data instanceof Uint32Array) || s.data.length !== length) return null;
       const layer: Layer = { id: 1, name: 'Ebene 1', visible: true, locked: false, opacity: 100, cels: new Map([[1, s.data]]) };
-      doc = PixelDocument.restore({ ...ONE_FRAME, width: s.width, height: s.height, layers: [layer], activeId: 1, nextId: 2 });
+      doc = PixelDocument.restore({ ...oneFrame(), width: s.width, height: s.height, layers: [layer], activeId: 1, nextId: 2 });
     } else if (s.version === 2) {
       if (!Array.isArray(s.layers) || s.layers.length < 1 || s.layers.length > MAX_LAYERS) return null;
       const layers: Layer[] = [];
@@ -75,7 +75,7 @@ export function parseState(raw: unknown): { doc: PixelDocument; palette: number[
       }
       if (!Number.isInteger(s.activeId) || !Number.isInteger(s.nextId)) return null;
       const nextId = Math.max(s.nextId, Math.max(...layers.map((l) => l.id)) + 1);
-      doc = PixelDocument.restore({ ...ONE_FRAME, width: s.width, height: s.height, layers, activeId: s.activeId, nextId });
+      doc = PixelDocument.restore({ ...oneFrame(), width: s.width, height: s.height, layers, activeId: s.activeId, nextId });
     } else {
       return null;
     }
