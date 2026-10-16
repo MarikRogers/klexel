@@ -1,5 +1,6 @@
 import { PixelDocument, Color } from '../model/Document';
 import { toCss } from '../palette/palettes';
+import { edgeRuns } from './edgeRuns';
 import type { SelectionEdge } from '../model/Selection';
 import type { Floating } from '../edit/SelectionSession';
 
@@ -94,6 +95,7 @@ export class Viewport {
     if (this.onion?.prev) ctx.drawImage(this.tint('prev', this.onion.prev, 255, 80, 80), x, y, W, H);
     if (this.onion?.next) ctx.drawImage(this.tint('next', this.onion.next, 80, 140, 255), x, y, W, H);
     ctx.drawImage(this.off, x, y, W, H);
+    this.drawFloating(ctx, x, y);
 
     if (this.showGrid && this.zoom >= 6) {
       ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.beginPath();
@@ -110,7 +112,8 @@ export class Viewport {
       }
       ctx.globalAlpha = 1;
     }
-    this.drawSelection(ctx, x, y);
+    // Bewusst nach dem Raster: Rahmen und Vorschau bleiben unabgedunkelt lesbar
+    this.drawOutline(ctx, x, y);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.strokeRect(x - .5, y - .5, W + 1, H + 1);
   }
 
@@ -133,22 +136,29 @@ export class Viewport {
     return this.floatOff.canvas;
   }
 
-  private drawSelection(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  private drawFloating(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const f = this.selectionOverlay?.floating;
+    if (!f) return;
+    const z = this.zoom;
+    // Auf die Dokumentfläche beschneiden: Absetzen verwirft, was außerhalb liegt
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, this.doc.width * z, this.doc.height * z); ctx.clip();
+    ctx.drawImage(this.floatCanvas(f), x + f.x * z, y + f.y * z, f.w * z, f.h * z);
+    ctx.restore();
+  }
+
+  private drawOutline(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const z = this.zoom;
     const ov = this.selectionOverlay;
-    if (ov?.floating) {
-      const f = ov.floating;
-      ctx.drawImage(this.floatCanvas(f), x + f.x * z, y + f.y * z, f.w * z, f.h * z);
-    }
     const outline = (stroke: string, dash: number[]) => {
       ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.setLineDash(dash);
     };
     if (ov && ov.edges.length) {
+      // Linienzüge statt Einzelkanten, damit das Strichmuster auch bei kleinem Zoom durchläuft
       ctx.beginPath();
-      for (const e of ov.edges) {
-        const sx = x + e.x * z + .5, sy = y + e.y * z + .5;
+      for (const r of edgeRuns(ov.edges)) {
+        const sx = x + r.x * z + .5, sy = y + r.y * z + .5;
         ctx.moveTo(sx, sy);
-        if (e.dir === 'h') ctx.lineTo(sx + z, sy); else ctx.lineTo(sx, sy + z);
+        if (r.dir === 'h') ctx.lineTo(sx + r.len * z, sy); else ctx.lineTo(sx, sy + r.len * z);
       }
       outline('#000', []); ctx.stroke();
       outline('#fff', [4, 4]); ctx.stroke();
