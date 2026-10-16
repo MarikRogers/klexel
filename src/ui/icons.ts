@@ -42,7 +42,7 @@ export const ICON = {
   // Einfügen: Klemmbrett
   paste: svg('<rect x="5" y="5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/>'),
   flipH: svg('<path d="M12 4v16" stroke-dasharray="2 2"/><path d="M9 7 3 17h6z"/><path d="m15 7 6 10h-6z" fill="currentColor" fill-opacity=".4"/>'),
-  flipV: svg('<path d="M4 12h16" stroke-dasharray="2 2"/><path d="M7 9 17 3v6z" transform="rotate(0)"/><path d="m7 15 10 6v-6z" fill="currentColor" fill-opacity=".4"/>'),
+  flipV: svg('<path d="M4 12h16" stroke-dasharray="2 2"/><path d="M7 9 17 3v6z"/><path d="m7 15 10 6v-6z" fill="currentColor" fill-opacity=".4"/>'),
   rotate: svg('<path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v5h-5"/>'),
   check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   // Onion Skin: zwei versetzte Kreise

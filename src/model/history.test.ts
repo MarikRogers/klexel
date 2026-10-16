@@ -231,3 +231,29 @@ describe('History: Strich fixiert die Ebene', () => {
     expect(doc.cel(b, doc.currentFrameId)).toBeUndefined();
   });
 });
+
+describe('History: offener Strich', () => {
+  it('undo/redo tun bei offenem Strich nichts und liefern false', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 5);
+    h.undo();
+    h.begin();
+    h.set(1, 1, 7);
+    expect(h.undo()).toBe(false);
+    expect(h.redo()).toBe(false);
+    expect(h.canRedo).toBe(true);
+    expect(h.strokeOpen).toBe(true);
+    h.cancel();
+    expect(doc.cel(doc.activeId, doc.currentFrameId)![1 * 4 + 1]).toBe(0);
+    expect(h.redo()).toBe(true);
+    expect(doc.cel(doc.activeId, doc.currentFrameId)![0]).toBe(5);
+  });
+  it('normales undo/redo bleibt unveraendert', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 5);
+    expect(h.undo()).toBe(true);
+    expect(doc.cel(doc.activeId, doc.currentFrameId)![0]).toBe(0);
+    expect(h.redo()).toBe(true);
+    expect(doc.cel(doc.activeId, doc.currentFrameId)![0]).toBe(5);
+  });
+});

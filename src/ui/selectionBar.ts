@@ -85,7 +85,11 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
   function refresh(): void {
     const s = deps.getSession();
     const mode = deps.getMode();
-    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    modeBtns.forEach(b => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
     for (const name of ['none', 'copy', 'cut', 'delete', 'flipH', 'flipV', 'rotate']) {
       act(name).disabled = !s.hasSelection;
     }

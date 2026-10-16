@@ -138,12 +138,15 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
   act('up').onclick = () => run(() => history().moveActive(1));
   act('down').onclick = () => run(() => history().moveActive(-1));
 
+  let sliderSettled = false;
+  slider.addEventListener('pointerdown', () => { deps.discardStroke(); deps.onChange(); sliderSettled = true; });
   slider.addEventListener('input', () => {
+    if (!sliderSettled) { deps.discardStroke(); sliderSettled = true; }
     output.textContent = slider.value;
     history().previewProps(doc().activeId, { opacity: +slider.value });
     deps.onChange();
   });
-  slider.addEventListener('change', () => { history().commitProps(); deps.onChange(); });
+  slider.addEventListener('change', () => { sliderSettled = false; history().commitProps(); deps.onChange(); });
 
   function close(): void {
     if (!open) return;

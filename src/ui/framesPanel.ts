@@ -101,8 +101,8 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
 
   // Vorschau committen, Strich verwerfen, Aktion ausführen, Anzeige aktualisieren
   function run(fn: () => unknown): void {
-    history().commitProps();
     deps.discardStroke();
+    history().commitProps();
     fn();
     deps.onChange();
   }
@@ -182,6 +182,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
   }
 
   async function exportWith(job: () => Promise<void>): Promise<void> {
+    deps.discardStroke(); deps.onChange(); // schwebende Auswahl absetzen (und Anzeige aktualisieren), bevor das Dokument gelesen wird
     sheetBtn.disabled = zipBtn.disabled = true;
     try { await job(); } catch (err) { console.error(err); showToast('Export fehlgeschlagen'); } finally { sheetBtn.disabled = zipBtn.disabled = false; }
   }

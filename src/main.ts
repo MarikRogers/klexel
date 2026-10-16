@@ -14,6 +14,7 @@ import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
+import { exceedsTapThreshold } from './edit/gestures';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
@@ -152,8 +153,10 @@ let gesture: { dist: number; cx: number; cy: number; zoom: number } | null = nul
 const local = (e: PointerEvent): [number, number] => {
   const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top];
 };
-// Auswahl-Geste: Verschieben (Inhalt folgt dem Finger) oder Rechteck aufziehen
+// Auswahl-Geste: erst ab TAP_THRESHOLD_PX Bildschirmdistanz Verschieben (Inhalt folgt dem Finger)
+// oder Rechteck aufziehen; darunter ist es ein Tap (Abwählen bzw. nichts).
 let selGesture:
+  | { kind: 'pending'; sx: number; sy: number; x: number; y: number; inside: boolean }
   | { kind: 'move'; x: number; y: number }
   | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
   | null = null;
@@ -162,16 +165,18 @@ function cancelSelGesture(): void {
   selGesture = null; view.selectionPreview = null;
 }
 
-function selectionDown(x: number, y: number): void {
-  if (selMode === 'replace' && session.hitTest(x, y)) selGesture = { kind: 'move', x, y };
-  else {
-    selGesture = { kind: 'rect', x0: x, y0: y, x1: x, y1: y };
-    view.selectionPreview = { kind: 'rect', x0: x, y0: y, x1: x, y1: y };
-  }
+function selectionDown(sx: number, sy: number, x: number, y: number): void {
+  selGesture = { kind: 'pending', sx, sy, x, y, inside: selMode === 'replace' && session.hitTest(x, y) };
 }
 
-function selectionMove(x: number, y: number): void {
-  const g = selGesture; if (!g) return;
+function selectionMove(sx: number, sy: number, x: number, y: number): void {
+  let g = selGesture; if (!g) return;
+  if (g.kind === 'pending') {
+    if (!exceedsTapThreshold(g.sx, g.sy, sx, sy)) return;
+    g = selGesture = g.inside
+      ? { kind: 'move', x: g.x, y: g.y }
+      : { kind: 'rect', x0: g.x, y0: g.y, x1: g.x, y1: g.y };
+  }
   if (g.kind === 'rect') {
     g.x1 = x; g.y1 = y; view.selectionPreview = { kind: 'rect', x0: g.x0, y0: g.y0, x1: x, y1: y };
     return;
@@ -187,9 +192,13 @@ function selectionMove(x: number, y: number): void {
 
 function selectionUp(): void {
   const g = selGesture; selGesture = null; view.selectionPreview = null;
-  if (g?.kind !== 'rect') return;
-  if (g.x0 !== g.x1 || g.y0 !== g.y1) session.select(Selection.rect(doc.width, doc.height, g.x0, g.y0, g.x1, g.y1), selMode);
-  else if (selMode === 'replace') session.deselect();
+  if (!g) return;
+  if (g.kind === 'pending') {
+    if (!g.inside && selMode === 'replace') { session.deselect(); scheduleSave(); }
+    return;
+  }
+  if (g.kind !== 'rect') return;
+  session.select(Selection.rect(doc.width, doc.height, g.x0, g.y0, g.x1, g.y1), selMode);
   scheduleSave();
 }
 
@@ -254,7 +263,7 @@ canvas.addEventListener('pointerdown', e => {
   }
   if (pointers.size > 2) return;
   const [x, y] = view.toDoc(cx, cy);
-  if (tool === 'select') { selectionDown(x, y); refresh(); return; }
+  if (tool === 'select') { selectionDown(cx, cy, x, y); refresh(); return; }
   if (tool === 'picker') {
     const c = doc.getComposite(x, y);
     if (c) { color = c; renderSwatches(); }
@@ -284,7 +293,7 @@ canvas.addEventListener('pointermove', e => {
     gesture.cx = mx; gesture.cy = my; gesture.zoom = view.zoom; gesture.dist = dist;
     refresh(); return;
   }
-  if (selGesture) { const [x, y] = view.toDoc(cx, cy); selectionMove(x, y); refresh(); return; }
+  if (selGesture) { const [x, y] = view.toDoc(cx, cy); selectionMove(cx, cy, x, y); refresh(); return; }
   if (shapeStart) {
     shapeEnd = view.toDoc(cx, cy); updateShapePreview(); refresh(); return;
   }
@@ -358,9 +367,15 @@ $<HTMLInputElement>('file').onchange = async e => {
   try { attach(await importPng(f)); scheduleSave(); } catch (err) { alert((err as Error).message); }
   input.value = '';
 };
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { session.commit(); scheduleSave(); refresh(); }
-});
+// Beim Verstecken/Schließen sofort speichern (kein 500-ms-Timer: die Seite kann vorher entladen werden)
+function flushSave(): void {
+  session.commit();
+  clearTimeout(saveTimer);
+  void saveState(doc, palette, color);
+  refresh();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+window.addEventListener('pagehide', flushSave);
 window.addEventListener('resize', () => { view.fit(); refresh(); });
 
 // Leisten einklappen (Zustand bleibt erhalten); danach Ansicht neu einpassen

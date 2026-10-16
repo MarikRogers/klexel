@@ -3,13 +3,24 @@ import { serializeState, parseState } from './state';
 
 const DB = 'pixelart', STORE = 'kv';
 
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+// Verbindung wiederverwenden: beim Entladen bleibt keine Zeit fürs erneute Öffnen
 function open(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
+  if (dbPromise) return dbPromise;
+  const p = new Promise<IDBDatabase>((res, rej) => {
     const r = indexedDB.open(DB, 1);
     r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-    r.onsuccess = () => res(r.result);
+    r.onsuccess = () => {
+      const db = r.result;
+      db.onclose = db.onversionchange = () => { db.close(); if (dbPromise === p) dbPromise = null; };
+      res(db);
+    };
     r.onerror = () => rej(r.error);
   });
+  dbPromise = p;
+  p.catch(() => { if (dbPromise === p) dbPromise = null; });
+  return p;
 }
 
 async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {

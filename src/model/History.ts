@@ -92,6 +92,7 @@ export class History {
   get canRedo(): boolean { return this.redoStack.length > 0; }
 
   undo(): boolean {
+    if (this.current) return false;
     const step = this.undoStack.pop();
     if (!step) return false;
     this.apply(step, 'undo');
@@ -100,6 +101,7 @@ export class History {
   }
 
   redo(): boolean {
+    if (this.current) return false;
     const step = this.redoStack.pop();
     if (!step) return false;
     this.apply(step, 'redo');
