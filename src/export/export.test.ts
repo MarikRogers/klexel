@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sheetLayout } from './sheet';
+import { sheetLayout, sheetTooLarge } from './sheet';
 import { crc32, buildZip } from './zip';
 
 const enc = new TextEncoder();
@@ -67,5 +67,28 @@ describe('buildZip', () => {
       expect(zip.slice(off + 30 + f.name.length, off + local(f))).toEqual(f.data);
       p += central(f);
     }
+  });
+});
+
+describe('sheetLayout Randfälle', () => {
+  it('NaN-Spalten fallen auf den Standard', () => {
+    expect(sheetLayout(5, 8, 8, 'grid', NaN).cols).toBe(3);
+  });
+  it('count 0 liefert keine NaN', () => {
+    const l = sheetLayout(0, 8, 8, 'grid');
+    expect(l).toMatchObject({ cols: 1, rows: 0, width: 8, height: 0 });
+    expect(sheetLayout(0, 8, 8, 'row').rows).toBe(0);
+  });
+});
+
+describe('sheetTooLarge', () => {
+  it('Seitenlimit 32767', () => {
+    expect(sheetTooLarge({ width: 65536 / 8, height: 128 }, 8)).toBe(true);
+    expect(sheetTooLarge({ width: 32767, height: 1 }, 1)).toBe(false);
+    expect(sheetTooLarge({ width: 32768, height: 1 }, 1)).toBe(true);
+  });
+  it('Flächenlimit', () => {
+    expect(sheetTooLarge({ width: 20000, height: 20000 }, 1)).toBe(true);
+    expect(sheetTooLarge({ width: 1024, height: 1024 }, 8)).toBe(false);
   });
 });

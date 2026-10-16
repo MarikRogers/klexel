@@ -2,6 +2,7 @@ import './style.css';
 import { PixelDocument, Color } from './model/Document';
 import { History } from './model/History';
 import { Viewport } from './render/Viewport';
+import { onionFrames } from './render/onion';
 import { linePoints } from './tools/line';
 import { floodFill } from './tools/fill';
 import { rectPoints, ellipsePoints } from './tools/shapes';
@@ -90,6 +91,7 @@ function attach(newDoc: PixelDocument): void {
 }
 
 function refresh(): void {
+  view.onion = onionFrames(doc);
   view.render();
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;

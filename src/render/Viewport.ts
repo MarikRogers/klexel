@@ -7,15 +7,35 @@ export class Viewport {
   panY = 0;
   showGrid = true;
   preview: { points: Array<[number, number]>; color: Color } | null = null;
+  /** Nachbarframes als Onion Skin (nur Anzeige, nie exportiert) */
+  onion: { prev: Uint32Array | null; next: Uint32Array | null } | null = null;
   private off: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
   private img: ImageData;
+  private onionOff: Record<'prev' | 'next', { canvas: HTMLCanvasElement; img: ImageData }>;
 
   constructor(private canvas: HTMLCanvasElement, private doc: PixelDocument) {
     this.off = document.createElement('canvas');
     this.off.width = doc.width; this.off.height = doc.height;
     this.offCtx = this.off.getContext('2d')!;
     this.img = this.offCtx.createImageData(doc.width, doc.height);
+    const side = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = doc.width; canvas.height = doc.height;
+      return { canvas, img: canvas.getContext('2d')!.createImageData(doc.width, doc.height) };
+    };
+    this.onionOff = { prev: side(), next: side() };
+  }
+
+  /** Nachbarframe einfärben, Alpha × 0.3 */
+  private tint(side: 'prev' | 'next', pixels: Uint32Array, r: number, g: number, b: number): HTMLCanvasElement {
+    const { canvas, img } = this.onionOff[side];
+    const d = img.data;
+    for (let i = 0; i < pixels.length; i++) {
+      d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = Math.round((pixels[i] & 255) * 0.3);
+    }
+    canvas.getContext('2d')!.putImageData(img, 0, 0);
+    return canvas;
   }
 
   fit(): void {
@@ -66,6 +86,8 @@ export class Viewport {
       ctx.fillRect(x + xx * cell, y + yy * cell, cell, cell);
     }
     ctx.restore();
+    if (this.onion?.prev) ctx.drawImage(this.tint('prev', this.onion.prev, 255, 80, 80), x, y, W, H);
+    if (this.onion?.next) ctx.drawImage(this.tint('next', this.onion.next, 80, 140, 255), x, y, W, H);
     ctx.drawImage(this.off, x, y, W, H);
 
     if (this.showGrid && this.zoom >= 6) {

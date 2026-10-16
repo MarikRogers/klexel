@@ -5,14 +5,27 @@ export type SheetMode = 'row' | 'column' | 'grid';
 export function sheetLayout(
   count: number, frameW: number, frameH: number, mode: SheetMode, columns?: number,
 ): { cols: number; rows: number; width: number; height: number; positions: Array<{ x: number; y: number }> } {
+  count = Math.max(0, Math.floor(count) || 0);
   let cols: number;
-  if (mode === 'row') cols = count;
+  if (mode === 'row') cols = Math.max(count, 1);
   else if (mode === 'column') cols = 1;
-  else cols = Math.min(Math.max(Math.floor(columns ?? Math.ceil(Math.sqrt(count))), 1), count);
+  else {
+    const c = Number.isFinite(columns) ? Math.floor(columns!) : Math.ceil(Math.sqrt(count));
+    cols = Math.min(Math.max(c, 1), Math.max(count, 1));
+  }
   const rows = Math.ceil(count / cols);
   const positions: Array<{ x: number; y: number }> = [];
   for (let i = 0; i < count; i++) positions.push({ x: (i % cols) * frameW, y: Math.floor(i / cols) * frameH });
   return { cols, rows, width: cols * frameW, height: rows * frameH, positions };
+}
+
+const MAX_SIDE = 32767;
+const MAX_AREA = 268_000_000;
+
+/** Übersteigt das Blatt die Canvas-Grenzen des Browsers? */
+export function sheetTooLarge(layout: { width: number; height: number }, scale: number): boolean {
+  const w = layout.width * scale, h = layout.height * scale;
+  return w > MAX_SIDE || h > MAX_SIDE || w * h > MAX_AREA;
 }
 
 function frameCanvas(doc: PixelDocument, frameId: number): HTMLCanvasElement {
