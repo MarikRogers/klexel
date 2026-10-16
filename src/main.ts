@@ -72,6 +72,7 @@ const panel = createLayersPanel({
 function attach(newDoc: PixelDocument): void {
   shapeStart = shapeEnd = null;
   panel.close();
+  panel.invalidate();
   doc = newDoc; history = new History(doc); view = new Viewport(canvas, doc);
   view.fit(); refresh();
 }
@@ -236,9 +237,9 @@ $('fillMode').onclick = e => {
   (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';
   (e.currentTarget as HTMLElement).classList.toggle('active', filledShapes);
 };
-$('undo').onclick = () => { history.commitProps(); history.undo(); refresh(); scheduleSave(); };
-$('redo').onclick = () => { history.commitProps(); history.redo(); refresh(); scheduleSave(); };
-$('layersBtn').onclick = () => panel.toggle();
+$('undo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); refresh(); scheduleSave(); };
+$('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); refresh(); scheduleSave(); };
+$('layersBtn').onclick = () => { panel.toggle(); refresh(); };
 $('grid').onclick = e => { view.showGrid = !view.showGrid; (e.currentTarget as HTMLElement).classList.toggle('active', view.showGrid); refresh(); };
 $('custom').onclick = () => { const i = $<HTMLInputElement>('colorInput'); i.value = toHex(color); i.click(); };
 $<HTMLInputElement>('colorInput').onchange = e => {

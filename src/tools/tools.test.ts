@@ -31,4 +31,14 @@ describe('floodFill', () => {
     expect(d.data.every(v => v === 4)).toBe(true);
     h.undo(); expect(d.data.every(v => v === 0)).toBe(true);
   });
+  it('Füllen wirkt nur auf die aktive Ebene', () => {
+    const d = new PixelDocument(4, 4); const h = new History(d);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 2; x++) d.layers[0].data[y * 4 + x] = 0xff0000ff;
+    d.touch();
+    h.addLayer(); // Ebene 2 aktiv, leer
+    h.begin(); floodFill(d, h, 0, 0, 0x00ff00ff); h.commit();
+    expect(d.layers[1].data.every(v => v === 0x00ff00ff)).toBe(true);
+    expect(d.layers[0].data[0]).toBe(0xff0000ff);
+    expect(d.layers[0].data[3]).toBe(0);
+  });
 });

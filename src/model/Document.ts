@@ -24,13 +24,11 @@ export function blendOver(dst: Color, src: Color, srcOpacity: number): Color {
   const da = (dst & 255) / 255;
   const outA = sa + da * (1 - sa);
   if (outA === 0) return 0;
-  let out = 0;
-  for (const shift of [24, 16, 8]) {
-    const sc = (src >>> shift) & 255;
-    const dc = (dst >>> shift) & 255;
-    const c = Math.round((sc * sa + dc * da * (1 - sa)) / outA);
-    out = out * 256 + c;
-  }
+  const k = da * (1 - sa);
+  const r = Math.round((((src >>> 24) & 255) * sa + ((dst >>> 24) & 255) * k) / outA);
+  const g = Math.round((((src >>> 16) & 255) * sa + ((dst >>> 16) & 255) * k) / outA);
+  const b = Math.round((((src >>> 8) & 255) * sa + ((dst >>> 8) & 255) * k) / outA);
+  const out = (r * 256 + g) * 256 + b;
   return (out * 256 + Math.round(outA * 255)) >>> 0;
 }
 
@@ -136,10 +134,13 @@ export class PixelDocument {
     const out = new Uint32Array(this.width * this.height);
     for (const layer of this.layers) {
       if (!layer.visible || layer.opacity === 0) continue;
+      const data = layer.data;
+      const opaque = layer.opacity === 100;
       for (let i = 0; i < out.length; i++) {
-        const s = layer.data[i];
+        const s = data[i];
         if (s === 0) continue;
-        out[i] = blendOver(out[i], s, layer.opacity);
+        // Schnellpfad: deckendes Pixel bei 100 % ersetzt das Ergebnis, ebenso über Transparent
+        out[i] = opaque && ((s & 255) === 255 || out[i] === 0) ? s : blendOver(out[i], s, layer.opacity);
       }
     }
     this.cache = out;

@@ -13,6 +13,8 @@ export interface LayersPanel {
   toggle(): void;
   close(): void;
   refresh(): void;
+  /** Alle Vorschaubilder beim nächsten refresh() neu zeichnen (Undo/Redo, neues Dokument) */
+  invalidate(): void;
   readonly isOpen: boolean;
 }
 
@@ -42,6 +44,8 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
   const act = (name: string) => el.querySelector<HTMLButtonElement>(`[data-act=${name}]`)!;
   let open = false;
   let signature = '';
+  let allThumbs = true;
+  let thumbFrame = 0;
 
   const doc = () => deps.getDoc();
   const history = () => deps.getHistory();
@@ -114,11 +118,22 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
     const d = doc();
     // Zeilen nur neu aufbauen, wenn sich Struktur oder Eigenschaften ändern (Schieberziehen nicht stören)
     const sig = d.layers.map(l => `${l.id}|${l.name}|${l.visible}|${l.locked}`).join(';') + `#${d.activeId}`;
-    if (sig !== signature) { signature = sig; buildRows(d); }
+    if (sig !== signature) { signature = sig; allThumbs = true; buildRows(d); }
     const rows = list.children;
-    for (let i = 0; i < rows.length; i++) {
-      const layer = d.layers[d.layers.length - 1 - i];
-      drawThumb(rows[i].querySelector('canvas')!, layer, d);
+    if (allThumbs) {
+      allThumbs = false;
+      for (let i = 0; i < rows.length; i++) {
+        drawThumb(rows[i].querySelector('canvas')!, d.layers[d.layers.length - 1 - i], d);
+      }
+    } else if (!thumbFrame) {
+      // Während des Zeichnens nur die aktive Ebene, höchstens einmal pro Frame
+      thumbFrame = requestAnimationFrame(() => {
+        thumbFrame = 0;
+        if (!open) return;
+        const cur = doc();
+        const row = list.querySelector('.layer-row.active canvas');
+        if (row) drawThumb(row as HTMLCanvasElement, cur.activeLayer, cur);
+      });
     }
     const a = layerActions(d);
     act('add').disabled = !a.canAdd;
@@ -162,10 +177,12 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
       open = true;
       el.hidden = false;
       signature = '';
+      allThumbs = true;
       refresh();
     },
     close,
     refresh,
+    invalidate() { allThumbs = true; },
     get isOpen() { return open; },
   };
 }

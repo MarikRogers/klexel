@@ -134,6 +134,29 @@ describe('History: Ebenen', () => {
     expect(h.mergeDown()).toBe(false);
   });
 
+  it('mergeDown: halbtransparent über transparent behält Farbe, Alpha ca. 128', () => {
+    const { doc, h } = setup();
+    const up = h.addLayer()!;
+    up.data[0] = 0x00ff0080;
+    expect(h.mergeDown()).toBe(true);
+    const v = doc.layers[0].data[0];
+    expect(v >>> 8).toBe(0x00ff00);
+    expect(Math.abs((v & 255) - 128)).toBeLessThanOrEqual(1);
+  });
+
+  it('mergeDown: Deckkraft der unteren Ebene bleibt Eigenschaft, wird nicht eingebacken', () => {
+    const { doc, h } = setup();
+    doc.layers[0].data[0] = 0xff0000ff;
+    doc.setLayerProps(1, { opacity: 60 });
+    const up = h.addLayer()!;
+    up.data[0] = 0x0000ffff;
+    up.data[1] = 0x00ff00ff;
+    expect(h.mergeDown()).toBe(true);
+    expect(doc.layers[0].opacity).toBe(60);
+    expect(doc.layers[0].data[0]).toBe(0x0000ffff);
+    expect(doc.layers[0].data[1]).toBe(0x00ff00ff);
+  });
+
   it('pixels mit Ebenenwechsel', () => {
     const { doc, h } = setup();
     const b = h.addLayer()!;

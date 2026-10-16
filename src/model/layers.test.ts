@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PixelDocument, MAX_LAYERS, layerActions } from './Document';
+import { PixelDocument, MAX_LAYERS, layerActions, blendOver } from './Document';
 
 function fill16(doc: PixelDocument): void {
   while (doc.layers.length < MAX_LAYERS) doc.insertLayer(doc.createLayer(), doc.layers.length);
@@ -157,5 +157,27 @@ describe('Compositing', () => {
     doc.layers[0].data[1] = 0x445566ff;
     doc.touch();
     expect(doc.composite()[1]).toBe(0x445566ff);
+  });
+});
+
+describe('composite: Schnellpfad', () => {
+  it('liefert dasselbe wie der allgemeine blendOver-Pfad', () => {
+    const px = [0, 0xff0000ff, 0x00ff00ff, 0x0000ff80, 0x12345601, 0xffffff7f, 0x80008080, 0xfffffffe];
+    for (const opacity of [100, 80, 33, 1]) {
+      const doc = new PixelDocument(px.length, px.length);
+      doc.layers.push({ id: 2, name: 'b', visible: true, locked: false, opacity, data: new Uint32Array(px.length * px.length) });
+      for (let y = 0; y < px.length; y++) for (let x = 0; x < px.length; x++) {
+        doc.layers[0].data[y * px.length + x] = px[y];
+        doc.layers[1].data[y * px.length + x] = px[x];
+      }
+      doc.touch();
+      const out = doc.composite();
+      for (let i = 0; i < out.length; i++) {
+        const ref = doc.layers[1].data[i] === 0 ? doc.layers[0].data[i]
+          : blendOver(doc.layers[0].data[i] === 0 ? 0 : blendOver(0, doc.layers[0].data[i], 100), doc.layers[1].data[i], opacity);
+        expect(out[i]).toBe(ref);
+        expect(out[i]).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });
