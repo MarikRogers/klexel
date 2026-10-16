@@ -348,3 +348,27 @@ describe('SelectionSession: Auswahl am Rand', () => {
     expect(history.canUndo).toBe(false);
   });
 });
+
+describe('SelectionSession donut mask', () => {
+  it('lift, move and commit write exactly the masked pixels as one undo step', () => {
+    const { doc, history, session } = setup();
+    for (let y = 1; y <= 5; y++) for (let x = 1; x <= 5; x++) fill(doc, x, y, 0xff0000ff);
+    fill(doc, 3, 3, 0x00ff00ff); // Lochpixel, liegt nicht in der Maske
+    const donut = rect(1, 1, 5, 5).combine(rect(3, 3, 3, 3), 'subtract');
+    session.select(donut, 'replace');
+    session.moveBy(0, 0);
+    session.moveBy(2, 2);
+    session.commit();
+    const cel = doc.cel(doc.activeId, doc.currentFrameId)!;
+    const at = (x: number, y: number) => cel[y * 8 + x];
+    expect(at(3, 3)).toBe(0xff0000ff);       // Lochpixel wurde nicht gehoben, nur vom Ring überschrieben
+    expect(at(5, 5)).toBe(0);                // Quelle gehoben, Lochposition des verschobenen Rings bleibt leer
+    expect(at(1, 1)).toBe(0);                // Quelle geleert
+    expect(at(7, 7)).toBe(0xff0000ff);
+    expect(at(5, 3)).toBe(0xff0000ff);
+    history.undo();
+    expect(at(1, 1)).toBe(0xff0000ff);
+    expect(at(7, 7)).toBe(0);
+    expect(history.canUndo).toBe(false);
+  });
+});

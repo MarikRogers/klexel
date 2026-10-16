@@ -177,9 +177,10 @@ export class Viewport {
         outline('#fff', [4, 4]); ctx.stroke();
         if (p.points.length > 2) {
           const [ex, ey] = at(p.points[p.points.length - 1]), [bx, by] = at(p.points[0]);
+          ctx.save();
           ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(bx, by);
           ctx.globalAlpha = 0.5; outline('#000', []); ctx.stroke(); outline('#fff', [4, 4]); ctx.stroke();
-          ctx.globalAlpha = 1;
+          ctx.restore();
         }
       }
     } else if (p) {

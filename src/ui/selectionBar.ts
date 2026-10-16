@@ -68,6 +68,7 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
 
   const act = (name: string) => el.querySelector<HTMLButtonElement>(`[data-act=${name}]`)!;
   const shapeBtns = [...el.querySelectorAll<HTMLButtonElement>('[data-shape]')];
+  const shapeGroup = el.querySelector<HTMLElement>('.selbar-shapes')!;
   const wandAllBtn = el.querySelector<HTMLButtonElement>('[data-wandall]')!;
   const modeBtns = [...el.querySelectorAll<HTMLButtonElement>('[data-mode]')];
 
@@ -117,7 +118,9 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', String(on));
     });
-    wandAllBtn.hidden = shape !== 'wand';
+    // Während des Schwebens wird nichts ausgewählt: Form und Schalter ausblenden (Platz im Hochformat)
+    shapeGroup.hidden = s.isFloating;
+    wandAllBtn.hidden = shape !== 'wand' || s.isFloating;
     wandAllBtn.classList.toggle('active', deps.getWandAll());
     wandAllBtn.setAttribute('aria-pressed', String(deps.getWandAll()));
     modeBtns.forEach(b => {

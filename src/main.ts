@@ -14,6 +14,7 @@ import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
+import { wandSelect } from './edit/wand';
 import { exceedsTapThreshold, appendPathPoint } from './edit/gestures';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
@@ -211,8 +212,7 @@ function selectionUp(): void {
   if (g.kind === 'pending') {
     if (g.inside) return;
     if (selShape === 'wand') {
-      if (g.x < 0 || g.y < 0 || g.x >= doc.width || g.y >= doc.height) return;
-      session.select(Selection.region(doc.width, doc.height, doc.cel(doc.activeId, doc.currentFrameId), g.x, g.y, !wandAll), selMode);
+      wandSelect(session, doc, g.x, g.y, wandAll, selMode);
       scheduleSave();
     } else if (selMode === 'replace') { session.deselect(); scheduleSave(); }
     return;

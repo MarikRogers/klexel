@@ -91,25 +91,27 @@ dialog input[type=number] { width:5em; font-size:18px; }
   .fx-preview { width:56px; height:56px; }
 }
 
-/* Auswahl-Leiste: Hochformat zwischen Fläche und Werkzeugen (Zeile 1: Form + Modus, Zeile 2: Aktionen, scrollt bei Bedarf), Querformat als Spalte links der Fläche */
-#selbar { background:var(--panel); display:flex; flex-direction:column; gap:4px; padding:4px 8px; align-items:stretch; }
-.selbar-row { display:flex; gap:3px; justify-content:center; align-items:center; }
-.selbar-group { display:contents; }
-.selbar-actions { display:flex; gap:3px; overflow-x:auto; justify-content:safe center; }
+/* Auswahl-Leiste: Hochformat zwischen Fläche und Werkzeugen, höchstens zwei Zeilen, ab 360 px ohne Scrollen; Querformat als Spalte links der Fläche */
+#selbar { background:var(--panel); display:flex; flex-wrap:wrap; gap:3px; padding:4px; justify-content:center; align-items:center; }
+#selbar [hidden] { display:none !important; }
+.selbar-row, .selbar-group { display:contents; }
 #selbar button { flex:none; min-width:40px; min-height:40px; padding:0 3px; font-size:16px; }
 #selbar .selbar-commit { display:flex; align-items:center; gap:4px; font-size:14px; }
 #selbar .selbar-commit span { white-space:nowrap; }
-#selbar .selbar-wandall { font-size:10px; line-height:1.15; padding:0 4px; }
-#selbar .selbar-wandall[hidden] { display:none; }
+#selbar .selbar-wandall { font-size:10px; line-height:1.15; padding:0 2px; }
 /* Hochformat: ✓ nur als Symbol */
 @media (orientation: portrait) {
-  #selbar { padding:4px; gap:3px; }
   #selbar .selbar-commit span { display:none; }
+}
+/* Sehr schmal (< 360 px): Zeile 1 Form + Modus, Zeile 2 Aktionen, die seitlich scrollt */
+@media (orientation: portrait) and (max-width: 359px) {
+  #selbar { flex-direction:column; flex-wrap:nowrap; align-items:stretch; }
+  .selbar-row { display:flex; gap:3px; justify-content:center; align-items:center; }
+  .selbar-actions { display:flex; gap:3px; overflow-x:auto; justify-content:safe center; }
 }
 @media (orientation: landscape) {
   #top { order:0; } #selbar { order:1; } #stage { order:2; } #bottom { order:3; }
-  #selbar { flex-wrap:nowrap; justify-content:flex-start; align-items:center; width:52px; padding:6px 4px; overflow-y:auto; }
-  .selbar-row, .selbar-actions { display:contents; }
+  #selbar { flex-direction:column; flex-wrap:nowrap; justify-content:flex-start; align-items:center; gap:4px; width:52px; padding:6px 4px; overflow-y:auto; }
   .selbar-group { display:flex; flex-direction:column; gap:4px; }
   #selbar button { padding:0; width:40px; }
   #selbar .selbar-commit { flex-direction:column; gap:0; font-size:10px; min-height:48px; }
