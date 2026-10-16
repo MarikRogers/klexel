@@ -1,10 +1,12 @@
-import { PixelDocument } from '../model/Document';
+import { PixelDocument, Color } from '../model/Document';
+import { toCss } from '../palette/palettes';
 
 export class Viewport {
   zoom = 8;       // Bildschirmpixel pro Dokumentpixel
   panX = 0;       // Verschiebung in Bildschirmpixeln
   panY = 0;
   showGrid = true;
+  preview: { points: Array<[number, number]>; color: Color } | null = null;
   private off: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
   private img: ImageData;
@@ -70,6 +72,15 @@ export class Viewport {
       for (let i = 0; i <= width; i++) { ctx.moveTo(x + i * this.zoom + .5, y); ctx.lineTo(x + i * this.zoom + .5, y + H); }
       for (let j = 0; j <= height; j++) { ctx.moveTo(x, y + j * this.zoom + .5); ctx.lineTo(x + W, y + j * this.zoom + .5); }
       ctx.stroke();
+    }
+    if (this.preview) {
+      // Vorschau liegt nur darüber, Dokument und History bleiben unberührt
+      ctx.fillStyle = toCss(this.preview.color); ctx.globalAlpha = 0.75;
+      for (const [px, py] of this.preview.points) {
+        if (px < 0 || py < 0 || px >= width || py >= height) continue;
+        ctx.fillRect(x + px * this.zoom, y + py * this.zoom, this.zoom, this.zoom);
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.strokeRect(x - .5, y - .5, W + 1, H + 1);
   }

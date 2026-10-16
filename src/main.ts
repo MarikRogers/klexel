@@ -4,10 +4,12 @@ import { History } from './model/History';
 import { Viewport } from './render/Viewport';
 import { linePoints } from './tools/line';
 import { floodFill } from './tools/fill';
+import { rectPoints, ellipsePoints } from './tools/shapes';
 import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
-type ToolName = 'pen' | 'eraser' | 'fill' | 'picker';
+type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
+type ShapeTool = 'line' | 'rect' | 'ellipse';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -29,6 +31,10 @@ app.innerHTML = `
       <button data-tool="pen" class="active" title="Stift">✎</button>
       <button data-tool="eraser" title="Radierer">⌫</button>
       <button data-tool="fill" title="Füllen">▣</button>
+      <button data-tool="line" title="Linie">╱</button>
+      <button data-tool="rect" title="Rechteck">▭</button>
+      <button data-tool="ellipse" title="Ellipse">◯</button>
+      <button id="fillMode" title="Umriss / gefüllt" hidden>▢</button>
       <button data-tool="picker" title="Pipette">⌖</button>
       <button id="custom" title="Eigene Farbe">🎨</button>
       <input id="colorInput" type="color" hidden />
@@ -53,6 +59,7 @@ let color: Color = palette[8];
 let tool: ToolName = 'pen';
 
 function attach(newDoc: PixelDocument): void {
+  shapeStart = shapeEnd = null;
   doc = newDoc; history = new History(doc); view = new Viewport(canvas, doc);
   view.fit(); refresh();
 }
@@ -91,6 +98,38 @@ const local = (e: PointerEvent): [number, number] => {
 };
 const paintColor = () => (tool === 'eraser' ? 0 : color);
 
+// ---- Formen: Vorschau beim Ziehen, ein Undo-Schritt beim Loslassen ----
+let filledShapes = false;
+let shapeStart: [number, number] | null = null;
+let shapeEnd: [number, number] | null = null;
+
+const isShape = (t: ToolName): t is ShapeTool => t === 'line' || t === 'rect' || t === 'ellipse';
+
+function shapePoints(t: ShapeTool, a: [number, number], b: [number, number]): Array<[number, number]> {
+  if (t === 'line') return linePoints(a[0], a[1], b[0], b[1]);
+  if (t === 'rect') return rectPoints(a[0], a[1], b[0], b[1], filledShapes);
+  return ellipsePoints(a[0], a[1], b[0], b[1], filledShapes);
+}
+
+function updateShapePreview(): void {
+  if (!shapeStart || !shapeEnd || !isShape(tool)) { view.preview = null; return; }
+  view.preview = { points: shapePoints(tool, shapeStart, shapeEnd), color };
+}
+
+function cancelShape(): void {
+  shapeStart = shapeEnd = null; view.preview = null;
+}
+
+function commitShape(): void {
+  if (shapeStart && shapeEnd && isShape(tool)) {
+    history.begin();
+    for (const [px, py] of shapePoints(tool, shapeStart, shapeEnd)) history.set(px, py, color);
+    history.commit();
+    scheduleSave();
+  }
+  cancelShape();
+}
+
 function apply(x: number, y: number): void {
   if (tool === 'pen' || tool === 'eraser') {
     const pts = last ? linePoints(last[0], last[1], x, y) : [[x, y] as [number, number]];
@@ -110,7 +149,8 @@ canvas.addEventListener('pointerdown', e => {
   const [cx, cy] = local(e);
   pointers.set(e.pointerId, { x: cx, y: cy });
   if (pointers.size === 2) {
-    endStroke(false); // zweiter Finger: laufenden Strich verwerfen
+    endStroke(false); // zweiter Finger: laufenden Strich bzw. Form verwerfen
+    cancelShape();
     const [a, b] = [...pointers.values()];
     gesture = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, zoom: view.zoom };
     refresh(); return;
@@ -121,6 +161,9 @@ canvas.addEventListener('pointerdown', e => {
     const c = doc.get(x, y);
     if (doc.inBounds(x, y) && c) { color = c; renderSwatches(); }
     return;
+  }
+  if (isShape(tool)) {
+    shapeStart = shapeEnd = [x, y]; updateShapePreview(); refresh(); return;
   }
   drawing = true; history.begin();
   if (tool === 'fill') { floodFill(doc, history, x, y, color); endStroke(true); scheduleSave(); }
@@ -141,6 +184,9 @@ canvas.addEventListener('pointermove', e => {
     gesture.cx = mx; gesture.cy = my; gesture.zoom = view.zoom; gesture.dist = dist;
     refresh(); return;
   }
+  if (shapeStart) {
+    shapeEnd = view.toDoc(cx, cy); updateShapePreview(); refresh(); return;
+  }
   if (!drawing) return;
   const [x, y] = view.toDoc(cx, cy);
   apply(x, y); refresh();
@@ -149,10 +195,11 @@ canvas.addEventListener('pointermove', e => {
 function release(e: PointerEvent): void {
   if (!pointers.delete(e.pointerId)) return;
   if (pointers.size < 2) gesture = null;
+  if (shapeStart) { commitShape(); refresh(); return; }
   if (drawing) { endStroke(true); scheduleSave(); refresh(); }
 }
 canvas.addEventListener('pointerup', release);
-canvas.addEventListener('pointercancel', e => { endStroke(false); release(e); refresh(); });
+canvas.addEventListener('pointercancel', e => { endStroke(false); cancelShape(); release(e); refresh(); });
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   view.zoomAt(e.offsetX, e.offsetY, view.zoom + (e.deltaY < 0 ? 1 : -1)); refresh();
@@ -162,10 +209,18 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 // ---- Buttons ----
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => {
   b.onclick = () => {
+    cancelShape();
     tool = b.dataset.tool as ToolName;
     document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
+    $('fillMode').hidden = !(tool === 'rect' || tool === 'ellipse');
+    refresh();
   };
 });
+$('fillMode').onclick = e => {
+  filledShapes = !filledShapes;
+  (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';
+  (e.currentTarget as HTMLElement).classList.toggle('active', filledShapes);
+};
 $('undo').onclick = () => { history.undo(); refresh(); scheduleSave(); };
 $('redo').onclick = () => { history.redo(); refresh(); scheduleSave(); };
 $('grid').onclick = e => { view.showGrid = !view.showGrid; (e.currentTarget as HTMLElement).classList.toggle('active', view.showGrid); refresh(); };
