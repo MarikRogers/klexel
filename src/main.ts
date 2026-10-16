@@ -12,6 +12,7 @@ import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
 import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
+import { createAboutDialog } from './ui/aboutDialog';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
@@ -25,7 +26,7 @@ type ShapeTool = 'line' | 'rect' | 'ellipse';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <div id="top">
-    <div class="brand"><img src="./favicon.png" alt="" width="32" height="32" /><span>Klexel</span></div>
+    <div class="brand" id="brand" role="button" tabindex="0" aria-label="Über Klexel"><img src="./favicon.png" alt="" width="32" height="32" /><span>Klexel</span></div>
     <div class="row row-edit">
       <button id="undo" title="Rückgängig">↶</button>
       <button id="redo" title="Wiederholen">↷</button>
@@ -376,6 +377,14 @@ $<HTMLInputElement>('colorInput').onchange = e => {
   renderSwatches(); scheduleSave();
 };
 $('new').onclick = () => { settleSelection(); $<HTMLDialogElement>('newDlg').showModal(); };
+
+// "Über Klexel": Antippen der Marke oben links
+const about = createAboutDialog();
+const openAbout = () => { settleSelection(); about.open(); };
+$('brand').addEventListener('click', openAbout);
+$('brand').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAbout(); }
+});
 $<HTMLDialogElement>('newDlg').addEventListener('close', function (this: HTMLDialogElement) {
   if (this.returnValue !== 'ok') return;
   const w = Math.round(+$<HTMLInputElement>('nw').value), h = Math.round(+$<HTMLInputElement>('nh').value);
