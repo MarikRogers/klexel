@@ -9,6 +9,7 @@ html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color
 canvas { position:absolute; inset:0; width:100%; height:100%; touch-action:none; image-rendering:pixelated; }
 button { background:#33333f; color:var(--fg); border:2px solid transparent; border-radius:10px; min-width:44px; min-height:44px; font-size:18px; padding:0 10px; }
 button:disabled { opacity:.35; }
+button svg { display:block; margin:auto; pointer-events:none; }
 button.active { border-color:var(--accent); }
 .row { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
 .swatches { display:grid; grid-template-columns:repeat(8,1fr); gap:6px; }

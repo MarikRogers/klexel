@@ -11,6 +11,17 @@ import { saveState, loadState, exportPng, importPng } from './storage/storage';
 type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
 type ShapeTool = 'line' | 'rect' | 'ellipse';
 
+const svg = (body: string) =>
+  `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const ICON = {
+  // Radiergummi: schräger Block, Gummiteil gefüllt
+  eraser: svg('<g transform="rotate(-45 12 12)"><rect x="3" y="8" width="18" height="8" rx="2"/><rect x="11" y="8" width="10" height="8" rx="2" fill="currentColor" fill-opacity=".4"/></g>'),
+  // Farbeimer: gekippter Eimer mit Farbtropfen
+  fill: svg('<path d="M4.5 12 11 5.5l7 7-5.6 5.6a2 2 0 0 1-2.8 0L4.5 14.8a2 2 0 0 1 0-2.8z"/><path d="M5 12h12.5"/><path d="M20.5 15.5c1 1.4 1.5 2.3 1.5 3a1.5 1.5 0 0 1-3 0c0-.7.5-1.6 1.5-3z" fill="currentColor"/>'),
+  // Pipette: Gummihütchen oben rechts, Spitze unten links
+  picker: svg('<path d="M15.5 3.5a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3l-2 2-4-4z"/><path d="m13.5 7.5 3 3-8 8h-3v-3z"/><path d="m5.5 18.5-1.5 1.5"/>'),
+};
+
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <div id="top">
@@ -29,13 +40,13 @@ app.innerHTML = `
   <div id="bottom">
     <div class="row" id="tools">
       <button data-tool="pen" class="active" title="Stift">✎</button>
-      <button data-tool="eraser" title="Radierer">⌫</button>
-      <button data-tool="fill" title="Füllen">▣</button>
+      <button data-tool="eraser" title="Radierer">${ICON.eraser}</button>
+      <button data-tool="fill" title="Füllen">${ICON.fill}</button>
       <button data-tool="line" title="Linie">╱</button>
       <button data-tool="rect" title="Rechteck">▭</button>
       <button data-tool="ellipse" title="Ellipse">◯</button>
       <button id="fillMode" title="Umriss / gefüllt" hidden>▢</button>
-      <button data-tool="picker" title="Pipette">⌖</button>
+      <button data-tool="picker" title="Pipette">${ICON.picker}</button>
       <button id="custom" title="Eigene Farbe">🎨</button>
       <input id="colorInput" type="color" hidden />
     </div>
