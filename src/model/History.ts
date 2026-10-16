@@ -52,14 +52,17 @@ export class History {
     // Ein laufender Strich schreibt immer in den Frame, in dem er begonnen wurde
     const frameId = this.current ? this.currentFrameId : doc.currentFrameId;
     if (doc.frameIndex(frameId) < 0) return false;
-    const before = doc.cel(doc.activeId, frameId)?.[i] ?? 0;
+    // ... und in die Ebene, die beim begin() aktiv war
+    const layerId = this.current ? this.currentLayerId : doc.activeId;
+    if (!doc.getLayer(layerId)) return false;
+    const before = doc.cel(layerId, frameId)?.[i] ?? 0;
     if (before === c) return false;
     if (this.current) {
       const existing = this.current.get(i);
       if (existing) existing.after = c;
       else this.current.set(i, { i, before, after: c });
     }
-    doc.ensureCel(doc.activeId, frameId)[i] = c;
+    doc.ensureCel(layerId, frameId)[i] = c;
     doc.touch(frameId);
     return true;
   }

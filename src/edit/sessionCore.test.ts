@@ -271,3 +271,80 @@ describe('SelectionSession cancel and reset', () => {
     expect(session.clip).toBeNull();
   });
 });
+
+describe('SelectionSession: Ebene/Frame beim Anheben fixiert', () => {
+  it('commit schreibt in die Ebene vom Anheben, auch wenn B gesperrt ist', () => {
+    const { doc, history, session } = setup();
+    const a = doc.activeId;
+    const b = history.addLayer()!.id;
+    doc.setActive(a);
+    fill(doc, 1, 1, 5);
+    session.select(rect(1, 1, 1, 1), 'replace');
+    session.lift();
+    doc.setActive(b);
+    doc.setLayerProps(b, { locked: true });
+    session.moveBy(2, 0);
+    session.commit();
+    const f = doc.currentFrameId;
+    expect(doc.cel(a, f)![1 * 8 + 3]).toBe(5);
+    expect(doc.cel(a, f)![1 * 8 + 1]).toBe(0);
+    expect(doc.cel(b, f)).toBeUndefined();
+    expect(history.undo()).toBe(true);
+    expect(doc.cel(a, f)![1 * 8 + 1]).toBe(5);
+    expect(doc.cel(a, f)![1 * 8 + 3]).toBe(0);
+    expect(doc.cel(b, f)).toBeUndefined();
+    // nächster Schritt ist nur noch das Hinzufügen der Ebene (genau ein Pixel-Schritt)
+    expect(doc.layers.length).toBe(2);
+    history.undo();
+    expect(doc.layers.length).toBe(1);
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('commit blendet gegen den Frame vom Anheben', () => {
+    const { doc, history, session } = setup();
+    const f1 = doc.currentFrameId;
+    const f2 = history.addFrame()!.id;
+    doc.setCurrentFrame(f1);
+    fill(doc, 0, 0, 0x00ff0080);
+    fill(doc, 3, 3, 0xff0000ff);
+    doc.ensureCel(doc.activeId, f2)[3 * 8 + 3] = 0x123456ff;
+    session.select(rect(0, 0, 0, 0), 'replace');
+    session.lift();
+    doc.setCurrentFrame(f2);
+    session.moveBy(3, 3);
+    session.commit();
+    expect(doc.cel(doc.activeId, f1)![3 * 8 + 3]).toBe(blendOver(0xff0000ff, 0x00ff0080, 100));
+    expect(doc.cel(doc.activeId, f2)![3 * 8 + 3]).toBe(0x123456ff);
+    expect(doc.cel(doc.activeId, f2)![0]).toBe(0);
+  });
+});
+
+describe('SelectionSession: Auswahl am Rand', () => {
+  it('selection und hitTest werden beim Schweben geklemmt', () => {
+    const { doc, session } = setup();
+    for (const [x, y] of [[6, 6], [7, 6], [6, 7], [7, 7]]) fill(doc, x, y, 5);
+    session.select(rect(6, 6, 7, 7), 'replace');
+    session.moveBy(1, 1);
+    expect(session.selection!.count()).toBe(1);
+    expect(session.hitTest(7, 7)).toBe(true);
+    expect(session.hitTest(6, 6)).toBe(false);
+    session.moveBy(5, 5);
+    expect(session.selection!.count()).toBe(0);
+    expect(session.hitTest(7, 7)).toBe(false);
+    expect(session.isFloating).toBe(true);
+  });
+
+  it('cancel nach Verschieben nach außen stellt Pixel und Maske wieder her', () => {
+    const { doc, history, session } = setup();
+    for (const [x, y] of [[6, 6], [7, 6], [6, 7], [7, 7]]) fill(doc, x, y, 5);
+    session.select(rect(6, 6, 7, 7), 'replace');
+    session.moveBy(1, 1);
+    session.moveBy(4, 4);
+    session.cancel();
+    expect(doc.get(6, 6)).toBe(5);
+    expect(doc.get(7, 7)).toBe(5);
+    expect(session.selection!.count()).toBe(4);
+    expect(session.hitTest(6, 6)).toBe(true);
+    expect(history.canUndo).toBe(false);
+  });
+});

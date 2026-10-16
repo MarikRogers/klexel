@@ -210,3 +210,24 @@ describe('History: Ebenen', () => {
     expect(doc.layers[0].opacity).toBe(50);
   });
 });
+
+describe('History: Strich fixiert die Ebene', () => {
+  it('schreibt nach Ebenenwechsel weiter in die Ebene vom begin()', () => {
+    const { doc, h } = setup();
+    const a = doc.activeId;
+    const b = h.addLayer()!.id;
+    doc.setActive(a);
+    h.begin();
+    h.set(1, 1, 7);
+    doc.setActive(b);
+    expect(h.set(2, 2, 9)).toBe(true);
+    h.commit();
+    expect(doc.cel(a, doc.currentFrameId)![1 * 4 + 1]).toBe(7);
+    expect(doc.cel(a, doc.currentFrameId)![2 * 4 + 2]).toBe(9);
+    expect(doc.cel(b, doc.currentFrameId)).toBeUndefined();
+    h.undo();
+    expect(doc.cel(a, doc.currentFrameId)![1 * 4 + 1]).toBe(0);
+    expect(doc.cel(a, doc.currentFrameId)![2 * 4 + 2]).toBe(0);
+    expect(doc.cel(b, doc.currentFrameId)).toBeUndefined();
+  });
+});

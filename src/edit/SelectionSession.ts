@@ -6,10 +6,17 @@ export interface Floating { pixels: Uint32Array; mask: Uint8Array; w: number; h:
 export interface Clip { pixels: Uint32Array; mask: Uint8Array; w: number; h: number }
 export type LiftResult = 'ok' | 'locked' | 'hidden' | 'none';
 
+/**
+ * Auswahl mit Schweben. Vertrag: Die UI soll commit() aufrufen, bevor Ebene oder Frame
+ * gewechselt oder Fenster geöffnet werden; tut sie es nicht, bleibt die Sitzung konsistent
+ * und schreibt in Ebene und Frame vom Anheben. Undo/Redo dürfen nicht bei offenem Strich
+ * (isFloating) aufgerufen werden. reset() bricht einen offenen Strich ab.
+ */
 export class SelectionSession {
   // Während des Schwebens bleibt die Maske an der Ausgangsposition (für Abbrechen)
   private mask: Selection | null = null;
   private float: Floating | null = null;
+  private liftTarget = { layerId: 0, frameId: 0 };
   private origin = { x: 0, y: 0 };
   private clipboard: Clip | null = null;
   private placed: Selection | null = null;
@@ -63,6 +70,7 @@ export class SelectionSession {
     const pixels = new Uint32Array(b.w * b.h);
     const fmask = new Uint8Array(b.w * b.h);
     history.begin();
+    this.liftTarget = { layerId: doc.activeId, frameId: doc.currentFrameId };
     for (let y = 0; y < b.h; y++) {
       for (let x = 0; x < b.w; x++) {
         if (!mask.contains(b.x + x, b.y + y)) continue;
@@ -91,6 +99,7 @@ export class SelectionSession {
     if (!f) return;
     const doc = this.getDoc();
     const history = this.getHistory();
+    const base = doc.cel(this.liftTarget.layerId, this.liftTarget.frameId);
     for (let y = 0; y < f.h; y++) {
       for (let x = 0; x < f.w; x++) {
         const i = y * f.w + x;
@@ -99,7 +108,7 @@ export class SelectionSession {
         const tx = f.x + x;
         const ty = f.y + y;
         if (!doc.inBounds(tx, ty)) continue;
-        history.set(tx, ty, blendOver(doc.get(tx, ty), px, 100));
+        history.set(tx, ty, blendOver(base?.[ty * doc.width + tx] ?? 0, px, 100));
       }
     }
     history.commit();
