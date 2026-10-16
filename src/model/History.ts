@@ -1,4 +1,4 @@
-import { PixelDocument, Color, Layer, LayerProps, blendOver, layerActions } from './Document';
+import { PixelDocument, Color, Frame, Layer, LayerProps, blendOver, layerActions, frameActions } from './Document';
 
 interface Change { i: number; before: Color; after: Color }
 
@@ -8,7 +8,11 @@ type Step =
   | { kind: 'remove'; layer: Layer; index: number; prevActive: number; nextActive: number }
   | { kind: 'move'; id: number; from: number; to: number }
   | { kind: 'props'; id: number; before: LayerProps; after: LayerProps }
-  | { kind: 'merge'; upper: Layer; index: number; frameId: number; lowerId: number; lowerBefore: Uint32Array; lowerAfter: Uint32Array };
+  | { kind: 'merge'; upper: Layer; index: number; lowerId: number; lowerBefore: Map<number, Uint32Array | undefined>; lowerAfter: Map<number, Uint32Array> }
+  | { kind: 'addFrame'; frame: Frame; index: number; prevCurrent: number }
+  | { kind: 'duplicateFrame'; frame: Frame; index: number; prevCurrent: number; cels: Map<number, Uint32Array | undefined> }
+  | { kind: 'removeFrame'; frame: Frame; index: number; prevCurrent: number; nextCurrent: number; cels: Map<number, Uint32Array | undefined> }
+  | { kind: 'moveFrame'; id: number; from: number; to: number };
 
 function snapshot(l: LayerProps): LayerProps {
   return { name: l.name, visible: l.visible, locked: l.locked, opacity: l.opacity };
@@ -44,16 +48,19 @@ export class History {
   set(x: number, y: number, c: Color): boolean {
     if (!this.doc.inBounds(x, y)) return false;
     const i = y * this.doc.width + x;
-    const before = this.doc.get(x, y);
+    const doc = this.doc;
+    // Ein laufender Strich schreibt immer in den Frame, in dem er begonnen wurde
+    const frameId = this.current ? this.currentFrameId : doc.currentFrameId;
+    if (doc.frameIndex(frameId) < 0) return false;
+    const before = doc.cel(doc.activeId, frameId)?.[i] ?? 0;
     if (before === c) return false;
     if (this.current) {
       const existing = this.current.get(i);
       if (existing) existing.after = c;
       else this.current.set(i, { i, before, after: c });
     }
-    const doc = this.doc;
-    doc.ensureCel(doc.activeId, doc.currentFrameId)[i] = c;
-    doc.touch(doc.currentFrameId);
+    doc.ensureCel(doc.activeId, frameId)[i] = c;
+    doc.touch(frameId);
     return true;
   }
 
@@ -70,10 +77,8 @@ export class History {
   cancel(): void {
     if (!this.current) return;
     const { currentLayerId: layerId, currentFrameId: frameId } = this;
-    if (this.doc.getLayer(layerId) && this.doc.frameIndex(frameId) >= 0) {
-      const cel = this.doc.ensureCel(layerId, frameId);
-      for (const ch of this.current.values()) cel[ch.i] = ch.before;
-    }
+    const cel = this.doc.cel(layerId, frameId);
+    if (cel) for (const ch of this.current.values()) cel[ch.i] = ch.before;
     this.current = null;
     this.doc.touch(frameId);
   }
@@ -110,8 +115,7 @@ export class History {
     layer.visible = src.visible;
     layer.locked = src.locked;
     layer.opacity = src.opacity;
-    const srcCel = src.cels.get(this.doc.currentFrameId);
-    if (srcCel) layer.cels.set(this.doc.currentFrameId, srcCel.slice());
+    for (const [frameId, cel] of src.cels) layer.cels.set(frameId, cel.slice());
     return this.insertNew(layer);
   }
 
@@ -151,20 +155,67 @@ export class History {
     const index = this.doc.indexOf(this.doc.activeId);
     const upper = this.doc.layers[index];
     const lower = this.doc.layers[index - 1];
-    const frameId = this.doc.currentFrameId;
-    const lowerBefore = (lower.cels.get(frameId) ?? new Uint32Array(this.doc.width * this.doc.height)).slice();
-    const lowerAfter = lowerBefore.slice();
-    const upperCel = upper.cels.get(frameId);
-    if (upperCel) {
-      for (let i = 0; i < lowerAfter.length; i++) {
-        if (upperCel[i] !== 0) lowerAfter[i] = blendOver(lowerBefore[i], upperCel[i], upper.opacity);
+    const lowerBefore = new Map<number, Uint32Array | undefined>();
+    const lowerAfter = new Map<number, Uint32Array>();
+    for (const [frameId, upperCel] of upper.cels) {
+      const before = lower.cels.get(frameId);
+      const after = before ? before.slice() : new Uint32Array(this.doc.width * this.doc.height);
+      for (let i = 0; i < after.length; i++) {
+        if (upperCel[i] !== 0) after[i] = blendOver(after[i], upperCel[i], upper.opacity);
       }
+      lowerBefore.set(frameId, before?.slice());
+      lowerAfter.set(frameId, after);
     }
     this.doc.removeLayer(upper.id);
-    this.doc.ensureCel(lower.id, frameId).set(lowerAfter);
+    for (const [frameId, after] of lowerAfter) lower.cels.set(frameId, after.slice());
     this.doc.setActive(lower.id);
     this.doc.touch();
-    this.push({ kind: 'merge', upper, index, frameId, lowerId: lower.id, lowerBefore, lowerAfter });
+    this.push({ kind: 'merge', upper, index, lowerId: lower.id, lowerBefore, lowerAfter });
+    return true;
+  }
+
+  addFrame(): Frame | null {
+    if (!frameActions(this.doc).canAdd) return null;
+    return this.insertNewFrame(this.doc.createFrame(), undefined);
+  }
+
+  duplicateFrame(): Frame | null {
+    if (!frameActions(this.doc).canDuplicate) return null;
+    const cels = new Map<number, Uint32Array | undefined>();
+    for (const layer of this.doc.layers) cels.set(layer.id, layer.cels.get(this.doc.currentFrameId)?.slice());
+    return this.insertNewFrame(this.doc.createFrame(), cels);
+  }
+
+  private insertNewFrame(frame: Frame, cels: Map<number, Uint32Array | undefined> | undefined): Frame {
+    const prevCurrent = this.doc.currentFrameId;
+    const index = this.doc.frameIndex(prevCurrent) + 1;
+    this.doc.insertFrame(frame, index);
+    if (cels) this.doc.restoreFrameCels(frame.id, cels);
+    this.doc.setCurrentFrame(frame.id);
+    if (cels) this.push({ kind: 'duplicateFrame', frame, index, prevCurrent, cels });
+    else this.push({ kind: 'addFrame', frame, index, prevCurrent });
+    return frame;
+  }
+
+  removeFrame(): boolean {
+    if (!frameActions(this.doc).canRemove) return false;
+    const prevCurrent = this.doc.currentFrameId;
+    const { frame, index, cels } = this.doc.removeFrame(prevCurrent);
+    // Frame davor, sonst (erster gelöscht) der neue erste
+    const nextCurrent = this.doc.frames[index > 0 ? index - 1 : 0].id;
+    this.doc.setCurrentFrame(nextCurrent);
+    this.push({ kind: 'removeFrame', frame, index, prevCurrent, nextCurrent, cels });
+    return true;
+  }
+
+  moveFrame(delta: 1 | -1): boolean {
+    const a = frameActions(this.doc);
+    if (delta === 1 ? !a.canMoveRight : !a.canMoveLeft) return false;
+    const id = this.doc.currentFrameId;
+    const from = this.doc.frameIndex(id);
+    const to = from + delta;
+    this.doc.moveFrame(id, to);
+    this.push({ kind: 'moveFrame', id, from, to });
     return true;
   }
 
@@ -214,6 +265,7 @@ export class History {
         if (!doc.getLayer(step.layerId) || doc.frameIndex(step.frameId) < 0) return;
         const cel = doc.ensureCel(step.layerId, step.frameId);
         for (const ch of step.changes) cel[ch.i] = undo ? ch.before : ch.after;
+        doc.setCurrentFrame(step.frameId);
         doc.touch(step.frameId);
         return;
       }
@@ -246,16 +298,43 @@ export class History {
         if (!lower) return;
         if (undo) {
           doc.insertLayer(step.upper, step.index);
-          doc.ensureCel(lower.id, step.frameId).set(step.lowerBefore);
+          for (const [frameId, cel] of step.lowerBefore) {
+            if (cel) lower.cels.set(frameId, cel.slice());
+            else lower.cels.delete(frameId);
+          }
           doc.setActive(step.upper.id);
         } else {
           doc.removeLayer(step.upper.id);
-          doc.ensureCel(lower.id, step.frameId).set(step.lowerAfter);
+          for (const [frameId, cel] of step.lowerAfter) lower.cels.set(frameId, cel.slice());
           doc.setActive(step.lowerId);
         }
         doc.touch();
         return;
       }
+      case 'addFrame':
+      case 'duplicateFrame':
+        if (undo) {
+          doc.removeFrame(step.frame.id);
+          doc.setCurrentFrame(step.prevCurrent);
+        } else {
+          doc.insertFrame(step.frame, step.index);
+          if (step.kind === 'duplicateFrame') doc.restoreFrameCels(step.frame.id, step.cels);
+          doc.setCurrentFrame(step.frame.id);
+        }
+        return;
+      case 'removeFrame':
+        if (undo) {
+          doc.insertFrame(step.frame, step.index);
+          doc.restoreFrameCels(step.frame.id, step.cels);
+          doc.setCurrentFrame(step.prevCurrent);
+        } else {
+          doc.removeFrame(step.frame.id);
+          doc.setCurrentFrame(step.nextCurrent);
+        }
+        return;
+      case 'moveFrame':
+        doc.moveFrame(step.id, undo ? step.from : step.to);
+        return;
     }
   }
 }
