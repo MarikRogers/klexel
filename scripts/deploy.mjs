@@ -5,8 +5,9 @@ import { mkdtempSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32', ...opts });
-const out = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', shell: process.platform === 'win32' }).trim();
+// npm ist unter Windows eine .cmd und braucht eine Shell; git nicht (sonst werden Argumente an Leerzeichen zerlegt).
+const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', shell: cmd === 'npm' && process.platform === 'win32', ...opts });
+const out = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 
 if (out('git', ['status', '--porcelain'])) {
   console.error('Es gibt uncommittete Änderungen. Bitte erst committen, damit der Deploy einem Stand entspricht.');
@@ -23,6 +24,7 @@ try {
   writeFileSync(join(tmp, '.nojekyll'), '');
   const git = args => run('git', args, { cwd: tmp });
   git(['init', '-b', 'gh-pages']);
+  git(['config', 'core.autocrlf', 'false']);
   git(['add', '-A']);
   git(['commit', '-m', `Deploy ${rev}`]);
   git(['push', '--force', remote, 'gh-pages']);
