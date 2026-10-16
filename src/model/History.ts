@@ -83,6 +83,8 @@ export class History {
     this.doc.touch(frameId);
   }
 
+  get strokeOpen(): boolean { return this.current !== null; }
+
   get canUndo(): boolean { return this.undoStack.length > 0; }
   get canRedo(): boolean { return this.redoStack.length > 0; }
 
