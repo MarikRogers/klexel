@@ -98,8 +98,11 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
       row.append(thumb, name, eye, lock);
       eye.onclick = e => { e.stopPropagation(); run(() => history().setProps(layer.id, { visible: !layer.visible })); };
       lock.onclick = e => { e.stopPropagation(); run(() => history().setProps(layer.id, { locked: !layer.locked })); };
-      row.onclick = () => {
-        if (layer.id === deps.getDoc().activeId) { rename(layer); return; }
+      row.onclick = e => {
+        if (layer.id === deps.getDoc().activeId) {
+          if (e.target === name) rename(layer);
+          return;
+        }
         run(() => deps.getDoc().setActive(layer.id));
       };
       list.appendChild(row);
