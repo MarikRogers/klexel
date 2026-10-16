@@ -52,7 +52,8 @@ export function parseState(raw: unknown): { doc: PixelDocument; palette: number[
     let doc: PixelDocument;
     if (s.version === undefined) {
       if (!(s.data instanceof Uint32Array) || s.data.length !== length) return null;
-      doc = new PixelDocument(s.width, s.height, s.data);
+      const layer: Layer = { id: 1, name: 'Ebene 1', visible: true, locked: false, opacity: 100, data: s.data };
+      doc = PixelDocument.fromLayers(s.width, s.height, [layer], 1, 2);
     } else if (s.version === 2) {
       if (!Array.isArray(s.layers) || s.layers.length < 1 || s.layers.length > MAX_LAYERS) return null;
       const layers: Layer[] = [];

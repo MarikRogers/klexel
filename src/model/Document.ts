@@ -42,13 +42,13 @@ export class PixelDocument {
   nextId: number;
   private cache: Uint32Array | null = null;
 
-  constructor(width: number, height: number, data?: Uint32Array) {
+  constructor(width: number, height: number) {
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > MAX_SIZE || height > MAX_SIZE) {
       throw new RangeError(`Größe muss 1..${MAX_SIZE} sein`);
     }
     this.width = width;
     this.height = height;
-    this.layers = [{ id: 1, name: 'Ebene 1', visible: true, locked: false, opacity: 100, data: data ?? new Uint32Array(width * height) }];
+    this.layers = [{ id: 1, name: 'Ebene 1', visible: true, locked: false, opacity: 100, data: new Uint32Array(width * height) }];
     this.activeId = 1;
     this.nextId = 2;
   }

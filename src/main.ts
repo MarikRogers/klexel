@@ -6,6 +6,7 @@ import { linePoints } from './tools/line';
 import { floodFill } from './tools/fill';
 import { rectPoints, ellipsePoints } from './tools/shapes';
 import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
+import { showToast } from './ui/toast';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
 type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
@@ -169,10 +170,12 @@ canvas.addEventListener('pointerdown', e => {
   if (pointers.size > 2) return;
   const [x, y] = view.toDoc(cx, cy);
   if (tool === 'picker') {
-    const c = doc.get(x, y);
-    if (doc.inBounds(x, y) && c) { color = c; renderSwatches(); }
+    const c = doc.getComposite(x, y);
+    if (c) { color = c; renderSwatches(); }
     return;
   }
+  const reason = doc.drawBlockReason();
+  if (reason) { showToast(reason === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet'); return; }
   if (isShape(tool)) {
     shapeStart = shapeEnd = [x, y]; updateShapePreview(); refresh(); return;
   }

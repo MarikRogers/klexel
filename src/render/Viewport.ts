@@ -48,7 +48,8 @@ export class Viewport {
     ctx.clearRect(0, 0, r.width, r.height);
     ctx.imageSmoothingEnabled = false;
 
-    const { width, height, data } = this.doc;
+    const { width, height } = this.doc;
+    const data = this.doc.composite();
     const px = this.img.data;
     for (let i = 0; i < width * height; i++) {
       const c = data[i];
