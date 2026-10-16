@@ -54,13 +54,12 @@ class SelectionSession {
   selectAll(): void;
   deselect(): void;                       // setzt ab, entfernt die Maske
   hitTest(x: number, y: number): boolean; // liegt (x, y) in der Auswahl bzw. im schwebenden Inhalt?
-  lift(): boolean;                        // false, wenn blockiert (gesperrt/ausgeblendet) oder keine Auswahl
+  lift(): LiftResult;                     // 'ok' | 'locked' | 'hidden' | 'none' (keine Auswahl)
   moveBy(dx: number, dy: number): void;   // hebt bei Bedarf selbst an
   commit(): void;                         // setzt ab (ein Undo-Schritt), Maske folgt dem Inhalt
   cancel(): void;                         // verwirft das Schweben, stellt die Ebene wieder her
-  flip(axis: 'h' | 'v'): boolean;   rotate90(): boolean;
-  copy(): boolean;   cut(): boolean;   delete(): boolean;
-  paste(centerX: number, centerY: number): boolean;
+  moveBy(dx, dy) / flip(axis: 'h' | 'v') / rotate90() / cut() / delete() / paste(centerX, centerY): LiftResult;   // 'ok' | 'locked' | 'hidden' | 'none'
+  copy(): boolean;                        // false ohne Auswahl
   reset(): void;                          // neues Dokument: Maske und Schweben verwerfen, Zwischenablage bleibt
 }
 ```
@@ -97,7 +96,7 @@ class SelectionSession {
   - Aktivierung: Aufheben/Kopieren/Ausschneiden/Löschen/Spiegeln/Drehen nur mit Auswahl; Einfügen nur mit Zwischenablage; blockierende Aktionen zeigen bei gesperrter/ausgeblendeter Ebene den Hinweis (Button bleibt antippbar, `aria-disabled`).
   - Layout: **Hochformat** in der Spaltenfolge zwischen Zeichenfläche und Werkzeugleiste, bis zu zwei Zeilen (nicht überlappend); **Querformat** als vertikale Spalte zwischen linker Leiste und Zeichenfläche, 52 px breit, scrollt. Touch-Ziele mindestens 40 px, Safe Areas beachtet, UI-Texte deutsch.
   - Einfügen nutzt als Mitte den Mittelpunkt der sichtbaren Zeichenfläche (`viewport.toDoc` des Canvas-Zentrums), auf die Dokumentfläche geklemmt.
-- **Darstellung (`Viewport`):** `selectionOverlay: { edges: Array<{x, y, dir}>, floating: Floating | null } | null`. Schwebende Pixel werden über dem Gesamtbild gezeichnet (volle Deckkraft ihres Alphas, an `floating.x/y`), der Rahmen entlang der Maskenkanten (1 px schwarz, darüber 1 px weiß gestrichelt, statisch), beides vor Raster und Form-Vorschau; die Zeichenfläche zeigt die Ebene mit dem „Loch“, weil `lift` die Quellpixel in der Ebene löscht.
+- **Darstellung (`Viewport`):** `selectionOverlay: { edges: Array<{x, y, dir}>, floating: Floating | null } | null`. Schwebende Pixel werden über dem Gesamtbild gezeichnet (volle Deckkraft ihres Alphas, an `floating.x/y`, auf die Fläche geklippt) und **vor** dem Raster; der Rahmen entlang der Maskenkanten (1 px schwarz, darüber 1 px weiß gestrichelt, über zusammenhängende Kantenläufe, statisch) und die Rechteck-Vorschau werden **nach** dem Raster gezeichnet, damit sie lesbar bleiben; die Zeichenfläche zeigt die Ebene mit dem „Loch“, weil `lift` die Quellpixel in der Ebene löscht.
 - **Rechteck-Geste** zeigt als Vorschau einen gestrichelten Rahmen (`view.preview`-ähnliches, getrenntes Feld `selectionPreview`), nicht die Pixel.
 
 ## Teil 2: Lasso und Zauberstab
