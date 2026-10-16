@@ -90,3 +90,18 @@ dialog input[type=number] { width:5em; font-size:18px; }
 @media (orientation: landscape) {
   .fx-preview { width:56px; height:56px; }
 }
+
+/* Auswahl-Leiste: Hochformat zwischen Fläche und Werkzeugen, Querformat als Spalte links der Fläche */
+#selbar { background:var(--panel); display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px; justify-content:center; align-items:center; }
+.selbar-group { display:contents; }
+#selbar button { min-width:40px; min-height:40px; padding:0 6px; font-size:16px; }
+#selbar .selbar-commit { display:flex; align-items:center; gap:4px; font-size:14px; }
+#selbar .selbar-commit span { white-space:nowrap; }
+@media (orientation: landscape) {
+  #top { order:0; } #selbar { order:1; } #stage { order:2; } #bottom { order:3; }
+  #selbar { flex-direction:column; flex-wrap:nowrap; justify-content:flex-start; width:52px; padding:6px 4px; overflow-y:auto; }
+  .selbar-group { display:flex; flex-direction:column; gap:4px; }
+  #selbar button { padding:0; width:40px; }
+  #selbar .selbar-commit { flex-direction:column; gap:0; font-size:10px; min-height:48px; }
+}
+#app.collapsed #selbar { padding-bottom:calc(4px + env(safe-area-inset-bottom)); }

@@ -11,6 +11,7 @@ import { showToast } from './ui/toast';
 import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
 import { createFramesPanel } from './ui/framesPanel';
+import { createSelectionBar } from './ui/selectionBar';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { saveBlob } from './export/saveBlob';
@@ -91,6 +92,18 @@ const framesPanel = createFramesPanel({
   discardStroke: () => { settleSelection(); endStroke(false); cancelShape(); },
 });
 
+const selectionBar = createSelectionBar({
+  getSession: () => session,
+  getMode: () => selMode,
+  setMode: m => { selMode = m; },
+  getPasteCenter: () => {
+    const r = canvas.getBoundingClientRect();
+    const [x, y] = view.toDoc(r.width / 2, r.height / 2);
+    return [Math.min(Math.max(x, 0), doc.width - 1), Math.min(Math.max(y, 0), doc.height - 1)];
+  },
+  onChange: () => { refresh(); scheduleSave(); },
+});
+
 function attach(newDoc: PixelDocument): void {
   session.reset(); selGesture = null;
   shapeStart = shapeEnd = null;
@@ -110,6 +123,7 @@ function refresh(): void {
   $<HTMLButtonElement>('redo').disabled = !history.canRedo || session.isFloating;
   panel.refresh();
   framesPanel.refresh();
+  selectionBar.refresh();
 }
 
 let saveTimer = 0;
@@ -304,6 +318,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => {
     tool = b.dataset.tool as ToolName;
     document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
     $('fillMode').hidden = !(tool === 'rect' || tool === 'ellipse');
+    selectionBar.setVisible(tool === 'select');
     refresh();
   };
 });

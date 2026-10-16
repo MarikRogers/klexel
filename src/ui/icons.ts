@@ -32,6 +32,19 @@ export const ICON = {
   stop: svg('<rect x="6" y="6" width="12" height="12" rx="1.5"/>'),
   // Auswahl: gestricheltes Rechteck
   select: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/>'),
+  // Alles auswählen: Rahmen mit gefülltem Kern
+  selAll: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/><rect x="8" y="9" width="8" height="6" fill="currentColor" fill-opacity=".4"/>'),
+  // Aufheben: Rahmen mit Kreuz
+  deselect: svg('<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.5"/><path d="m9 9.5 6 5M15 9.5l-6 5"/>'),
+  copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
+  // Ausschneiden: Schere
+  cut: svg('<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m7.8 16.2 10-12.7M16.2 16.2l-10-12.7"/>'),
+  // Einfügen: Klemmbrett
+  paste: svg('<rect x="5" y="5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/>'),
+  flipH: svg('<path d="M12 4v16" stroke-dasharray="2 2"/><path d="M9 7 3 17h6z"/><path d="m15 7 6 10h-6z" fill="currentColor" fill-opacity=".4"/>'),
+  flipV: svg('<path d="M4 12h16" stroke-dasharray="2 2"/><path d="M7 9 17 3v6z" transform="rotate(0)"/><path d="m7 15 10 6v-6z" fill="currentColor" fill-opacity=".4"/>'),
+  rotate: svg('<path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v5h-5"/>'),
+  check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   // Onion Skin: zwei versetzte Kreise
   onion: svg('<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6" stroke-dasharray="2 2"/>'),
 };
