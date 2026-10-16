@@ -1,5 +1,5 @@
-const CACHE = 'pixelart-v2';
-const STATIC = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const CACHE = 'pixelart-v3';
+const STATIC = ['./', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Beim Installieren alles Nötige vorab laden, inkl. der gehashten JS/CSS-Dateien aus index.html,
 // damit die App schon nach dem ersten Besuch offline startet.
