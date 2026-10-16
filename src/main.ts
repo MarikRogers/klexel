@@ -284,7 +284,7 @@ view.fit(); refresh();
 void loadState().then(s => {
   if (!s) return;
   palette = s.palette; color = s.color; renderSwatches();
-  attach(new PixelDocument(s.width, s.height, s.data));
+  attach(s.doc);
 });
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');

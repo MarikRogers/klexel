@@ -1,4 +1,5 @@
 import { PixelDocument } from '../model/Document';
+import { serializeState, parseState } from './state';
 
 const DB = 'pixelart', STORE = 'kv';
 
@@ -20,15 +21,12 @@ async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   });
 }
 
-interface Saved { width: number; height: number; data: Uint32Array; palette: number[]; color: number }
-
 export async function saveState(doc: PixelDocument, palette: number[], color: number): Promise<void> {
-  const s: Saved = { width: doc.width, height: doc.height, data: doc.data, palette, color };
-  await kv('readwrite', st => st.put(s, 'current'));
+  await kv('readwrite', st => st.put(serializeState(doc, palette, color), 'current'));
 }
 
-export async function loadState(): Promise<Saved | null> {
-  try { return (await kv<Saved | undefined>('readonly', st => st.get('current'))) ?? null; } catch { return null; }
+export async function loadState(): Promise<{ doc: PixelDocument; palette: number[]; color: number } | null> {
+  try { return parseState(await kv<unknown>('readonly', st => st.get('current'))); } catch { return null; }
 }
 
 export function exportPng(doc: PixelDocument, scale: number): Promise<Blob> {
@@ -37,8 +35,9 @@ export function exportPng(doc: PixelDocument, scale: number): Promise<Blob> {
   const small = document.createElement('canvas');
   small.width = doc.width; small.height = doc.height;
   const id = small.getContext('2d')!.createImageData(doc.width, doc.height);
-  for (let i = 0; i < doc.data.length; i++) {
-    const v = doc.data[i];
+  const pixels = doc.composite();
+  for (let i = 0; i < pixels.length; i++) {
+    const v = pixels[i];
     id.data[i * 4] = v >>> 24; id.data[i * 4 + 1] = (v >>> 16) & 255; id.data[i * 4 + 2] = (v >>> 8) & 255; id.data[i * 4 + 3] = v & 255;
   }
   small.getContext('2d')!.putImageData(id, 0, 0);
