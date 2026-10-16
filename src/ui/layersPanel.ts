@@ -1,6 +1,7 @@
 import { PixelDocument, Layer, layerActions } from '../model/Document';
 import { History } from '../model/History';
 import { ICON } from './icons';
+import { drawThumb } from './thumb';
 
 export interface LayersPanelDeps {
   getDoc(): PixelDocument;
@@ -17,8 +18,6 @@ export interface LayersPanel {
   invalidate(): void;
   readonly isOpen: boolean;
 }
-
-const THUMB = 24;
 
 export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
   const el = document.createElement('div');
@@ -57,24 +56,8 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
     deps.onChange();
   }
 
-  function drawThumb(canvas: HTMLCanvasElement, layer: Layer, d: PixelDocument): void {
-    const ctx = canvas.getContext('2d')!;
-    const src = document.createElement('canvas');
-    src.width = d.width; src.height = d.height;
-    const img = new ImageData(d.width, d.height);
-    const px = new Uint32Array(img.data.buffer);
-    const cel = d.cel(layer.id, d.currentFrameId);
-    for (let i = 0; cel && i < cel.length; i++) {
-      const c = cel[i];
-      // 0xRRGGBBAA -> little-endian 0xAABBGGRR
-      px[i] = (((c & 255) << 24) | (((c >>> 8) & 255) << 16) | (((c >>> 16) & 255) << 8) | (c >>> 24)) >>> 0;
-    }
-    src.getContext('2d')!.putImageData(img, 0, 0);
-    const s = Math.min(THUMB / d.width, THUMB / d.height);
-    const w = Math.max(1, Math.round(d.width * s)), h = Math.max(1, Math.round(d.height * s));
-    ctx.clearRect(0, 0, THUMB, THUMB);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(src, Math.floor((THUMB - w) / 2), Math.floor((THUMB - h) / 2), w, h);
+  function drawLayerThumb(canvas: HTMLCanvasElement, layer: Layer, d: PixelDocument): void {
+    drawThumb(canvas, d.cel(layer.id, d.currentFrameId), d.width, d.height);
   }
 
   function rename(layer: Layer): void {
@@ -90,7 +73,7 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
       row.className = 'layer-row' + (layer.id === d.activeId ? ' active' : '');
       row.dataset.id = String(layer.id);
       const thumb = document.createElement('canvas');
-      thumb.width = thumb.height = THUMB;
+      thumb.width = thumb.height = 24;
       const name = document.createElement('span');
       name.className = 'layer-name';
       name.textContent = layer.name;
@@ -124,7 +107,7 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
     if (allThumbs) {
       allThumbs = false;
       for (let i = 0; i < rows.length; i++) {
-        drawThumb(rows[i].querySelector('canvas')!, d.layers[d.layers.length - 1 - i], d);
+        drawLayerThumb(rows[i].querySelector('canvas')!, d.layers[d.layers.length - 1 - i], d);
       }
     } else if (!thumbFrame) {
       // Während des Zeichnens nur die aktive Ebene, höchstens einmal pro Frame
@@ -133,7 +116,7 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
         if (!open) return;
         const cur = doc();
         const row = list.querySelector('.layer-row.active canvas');
-        if (row) drawThumb(row as HTMLCanvasElement, cur.activeLayer, cur);
+        if (row) drawLayerThumb(row as HTMLCanvasElement, cur.activeLayer, cur);
       });
     }
     const a = layerActions(d);

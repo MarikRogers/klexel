@@ -22,4 +22,14 @@ export const ICON = {
   trash: svg('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>'),
   up: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
   down: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
+  // Frames: Filmstreifen mit Lochrand
+  frames: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14"/><path d="M3 9.5h5M3 14.5h5M16 9.5h5M16 14.5h5"/>'),
+  addFrame: svg('<rect x="3" y="6" width="14" height="12" rx="2"/><path d="M20 9v6M17 12h6"/>'),
+  duplicateFrame: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/><path d="M14 11v6M11 14h6"/>'),
+  left: svg('<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>'),
+  right: svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
+  play: svg('<path d="M7 4.5v15l12-7.5z"/>'),
+  stop: svg('<rect x="6" y="6" width="12" height="12" rx="1.5"/>'),
+  // Onion Skin: zwei versetzte Kreise
+  onion: svg('<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6" stroke-dasharray="2 2"/>'),
 };

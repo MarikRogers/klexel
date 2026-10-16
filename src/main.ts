@@ -9,6 +9,7 @@ import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
 import { showToast } from './ui/toast';
 import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
+import { createFramesPanel } from './ui/framesPanel';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
@@ -23,6 +24,7 @@ app.innerHTML = `
       <button id="redo" title="Wiederholen">↷</button>
       <button id="grid" class="active" title="Raster">▦</button>
       <button id="layersBtn" title="Ebenen">${ICON.layers}</button>
+      <button id="framesBtn" title="Frames">${ICON.frames}</button>
     </div>
     <div class="row">
       <button id="new" title="Neu">＋</button>
@@ -70,10 +72,19 @@ const panel = createLayersPanel({
   discardStroke: () => { endStroke(false); cancelShape(); },
 });
 
+const framesPanel = createFramesPanel({
+  getDoc: () => doc,
+  getHistory: () => history,
+  onChange: () => { refresh(); scheduleSave(); },
+  discardStroke: () => { endStroke(false); cancelShape(); },
+});
+
 function attach(newDoc: PixelDocument): void {
   shapeStart = shapeEnd = null;
   panel.close();
+  framesPanel.close();
   panel.invalidate();
+  framesPanel.invalidate();
   doc = newDoc; history = new History(doc); view = new Viewport(canvas, doc);
   view.fit(); refresh();
 }
@@ -83,6 +94,7 @@ function refresh(): void {
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
   panel.refresh();
+  framesPanel.refresh();
 }
 
 let saveTimer = 0;
@@ -238,9 +250,10 @@ $('fillMode').onclick = e => {
   (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';
   (e.currentTarget as HTMLElement).classList.toggle('active', filledShapes);
 };
-$('undo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); refresh(); scheduleSave(); };
-$('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); refresh(); scheduleSave(); };
-$('layersBtn').onclick = () => { panel.toggle(); refresh(); };
+$('undo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+$('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+$('layersBtn').onclick = () => { framesPanel.close(); panel.toggle(); refresh(); };
+$('framesBtn').onclick = () => { panel.close(); framesPanel.toggle(); refresh(); };
 $('grid').onclick = e => { view.showGrid = !view.showGrid; (e.currentTarget as HTMLElement).classList.toggle('active', view.showGrid); refresh(); };
 $('custom').onclick = () => { const i = $<HTMLInputElement>('colorInput'); i.value = toHex(color); i.click(); };
 $<HTMLInputElement>('colorInput').onchange = e => {
