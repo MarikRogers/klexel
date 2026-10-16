@@ -213,13 +213,117 @@ describe('paste', () => {
     session.commit();
     expect(doc.get(6, 4)).toBe(5);
     expect(doc.get(7, 4)).toBe(6);
-    const big = setup();
-    big.session.selectAll();
-    big.session.copy();
-    big.session.deselect();
-    big.session.paste(8, 8);
-    big.session.commit();
-    expect(big.history.strokeOpen).toBe(false);
+  });
+
+  it('clips a clip that sticks out of the area: only in-area pixels land, one step', () => {
+    const { doc, history, session } = setup();
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) fill(doc, x, y, 10 + y * 3 + x);
+    session.select(rect(0, 0, 2, 2), 'replace');
+    session.copy();
+    session.deselect();
+    // Mitte (7, 7) -> x = y = round(5.5) = 6: Clip ragt rechts und unten hinaus
+    expect(session.paste(7, 7)).toBe('ok');
+    expect(() => session.commit()).not.toThrow();
+    expect(doc.get(6, 6)).toBe(10);
+    expect(doc.get(7, 6)).toBe(11);
+    expect(doc.get(6, 7)).toBe(13);
+    expect(doc.get(7, 7)).toBe(14);
+    expect(doc.get(5, 5)).toBe(0);
+    expect(doc.get(0, 0)).toBe(10);
+    expect(session.selection!.count()).toBe(4);
+    expect(history.undo()).toBe(true);
+    expect(doc.get(6, 6)).toBe(0);
+    expect(doc.get(7, 7)).toBe(0);
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('cancelling a paste restores the previous selection', () => {
+    const { session } = copied();
+    session.select(rect(5, 5, 6, 6), 'replace');
+    session.paste(2, 2);
+    session.cancel();
+    expect(session.isFloating).toBe(false);
+    expect(session.selection!.bounds()).toEqual({ x: 5, y: 5, w: 2, h: 2 });
+  });
+
+  it('cancelling a paste without a previous selection leaves none', () => {
+    const { history, session } = copied();
+    session.paste(4, 4);
+    expect(session.hasSelection).toBe(true);
+    session.cancel();
+    expect(session.hasSelection).toBe(false);
+    expect(session.selection).toBeNull();
+    expect(history.strokeOpen).toBe(false);
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('flip, cut and delete work on a pasted float without previous selection', () => {
+    const { doc, history, session } = copied();
+    session.paste(4, 4);
+    expect(session.flip('h')).toBe('ok');
+    expect(Array.from(session.floating!.pixels)).toEqual([6, 5]);
+    expect(session.cut()).toBe('ok');
+    expect(session.isFloating).toBe(false);
+    expect(doc.get(3, 4)).toBe(0);
+    expect(history.strokeOpen).toBe(false);
+  });
+
+  it('rounds the position: odd and even sizes, never -0, negative centre', () => {
+    const { doc, session } = setup();
+    fill(doc, 0, 0, 5);
+    session.select(rect(0, 0, 0, 0), 'replace');
+    session.copy();
+    session.paste(0, 0);
+    expect(session.floating!.x).toBe(0);
+    expect(session.floating!.y).toBe(0);
+    session.cancel();
+    session.paste(-3, -3);
+    expect(session.floating!.x).toBe(-3);
+    session.cancel();
+    session.paste(4, 4);
+    expect(session.floating!.x).toBe(4);
+    session.cancel();
+    session.select(rect(0, 0, 1, 0), 'replace');
+    session.copy();
+    session.paste(4, 4);
+    expect(session.floating!.x).toBe(3);
+  });
+});
+
+describe('cut and delete while floating', () => {
+  it('cut while floating: clip has the floating content, source stays cleared, one step', () => {
+    const { doc, history, session } = setup();
+    fill(doc, 1, 1, 5);
+    session.select(rect(1, 1, 1, 1), 'replace');
+    session.moveBy(3, 0);
+    expect(session.cut()).toBe('ok');
+    expect(Array.from(session.clip!.pixels)).toEqual([5]);
+    expect(session.isFloating).toBe(false);
+    expect(history.strokeOpen).toBe(false);
+    expect(doc.get(1, 1)).toBe(0);
+    expect(doc.get(4, 1)).toBe(0);
+    history.undo();
+    expect(doc.get(1, 1)).toBe(5);
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('delete after rotate90 leaves the hole and discards the float, one step', () => {
+    const { doc, history, session } = setup();
+    fill(doc, 1, 1, 5);
+    fill(doc, 2, 1, 6);
+    session.select(rect(1, 1, 2, 1), 'replace');
+    session.rotate90();
+    expect(session.delete()).toBe('ok');
+    expect(session.isFloating).toBe(false);
+    expect(history.strokeOpen).toBe(false);
+    expect(doc.get(1, 1)).toBe(0);
+    expect(doc.get(2, 1)).toBe(0);
+    expect(doc.get(1, 2)).toBe(0);
+    expect(session.selection!.bounds()).toEqual({ x: 1, y: 1, w: 1, h: 2 });
+    history.undo();
+    expect(doc.get(1, 1)).toBe(5);
+    expect(doc.get(2, 1)).toBe(6);
+    expect(history.canUndo).toBe(false);
   });
 });
 

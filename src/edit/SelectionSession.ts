@@ -29,7 +29,7 @@ export class SelectionSession {
 
   get selection(): Selection | null {
     const f = this.float;
-    if (!this.mask || !f) return this.mask;
+    if (!f) return this.mask;
     if (!this.placed) {
       const doc = this.getDoc();
       this.placed = Selection.fromBox(doc.width, doc.height, f.mask, f.w, f.h, f.x, f.y);
@@ -39,7 +39,7 @@ export class SelectionSession {
 
   get floating(): Floating | null { return this.float; }
   get clip(): Clip | null { return this.clipboard; }
-  get hasSelection(): boolean { return this.mask !== null; }
+  get hasSelection(): boolean { return this.mask !== null || this.float !== null; }
   get isFloating(): boolean { return this.float !== null; }
 
   select(shape: Selection, mode: SelectionMode): void {
@@ -129,7 +129,6 @@ export class SelectionSession {
     this.getHistory().cancel();
     this.float = null;
     this.placed = null;
-    if (this.mask?.isEmpty()) this.mask = null;
   }
 
   flip(axis: 'h' | 'v'): LiftResult {
@@ -193,17 +192,15 @@ export class SelectionSession {
       mask: clip.mask.slice(),
       w: clip.w,
       h: clip.h,
-      x: Math.round(centerX - clip.w / 2),
-      y: Math.round(centerY - clip.h / 2),
+      x: Math.round(centerX - clip.w / 2) + 0,
+      y: Math.round(centerY - clip.h / 2) + 0,
     };
     this.placed = null;
-    // Die Maske gehört zum Einfügen: Abbrechen lässt sie an dieser Position
-    this.mask = Selection.fromBox(doc.width, doc.height, clip.mask, clip.w, clip.h, this.float.x, this.float.y);
     return 'ok';
   }
 
   private guard(): LiftResult {
-    if (!this.mask) return 'none';
+    if (!this.mask && !this.float) return 'none';
     return this.getDoc().drawBlockReason() ?? 'ok';
   }
 
