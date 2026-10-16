@@ -3,13 +3,18 @@ import { PixelDocument, type Layer } from '../model/Document';
 import { serializeState, parseState } from './state';
 
 function layer(id: number, over: Partial<Layer> = {}): Layer {
-  return { id, name: `L${id}`, visible: true, locked: false, opacity: 100, data: new Uint32Array(4), ...over };
+  return { id, name: `L${id}`, visible: true, locked: false, opacity: 100, cels: new Map([[1, new Uint32Array(4)]]), ...over };
+}
+
+// Gespeichertes v2-Format: pro Ebene ein Feld `data`
+function rawLayer(id: number): any {
+  return { id, name: `L${id}`, visible: true, locked: false, opacity: 100, data: new Uint32Array(4) };
 }
 
 function validRaw(): any {
   return {
     version: 2, width: 2, height: 2,
-    layers: [layer(1), layer(2)],
+    layers: [rawLayer(1), rawLayer(2)],
     activeId: 1, nextId: 3, palette: [1, 2], color: 1,
   };
 }
@@ -17,11 +22,11 @@ function validRaw(): any {
 describe('state', () => {
   it('Roundtrip mit 3 Ebenen', () => {
     const a = layer(1, { name: 'Hintergrund', opacity: 40 });
-    a.data[1] = 0xff0000ff;
+    a.cels.get(1)![1] = 0xff0000ff;
     const b = layer(2, { name: 'Mitte', visible: false });
     const c = layer(5, { name: 'Oben', locked: true, opacity: 0 });
-    c.data[3] = 0x00ff00ff;
-    const doc = PixelDocument.fromLayers(2, 2, [a, b, c], 2, 6);
+    c.cels.get(1)![3] = 0x00ff00ff;
+    const doc = PixelDocument.restore({ width: 2, height: 2, frames: [{ id: 1 }], currentFrameId: 1, nextFrameId: 2, layers: [a, b, c], activeId: 2, nextId: 6 });
     const r = parseState(serializeState(doc, [10, 20, 30], 20))!;
     expect(r).not.toBeNull();
     expect(r.doc.width).toBe(2);
@@ -44,7 +49,7 @@ describe('state', () => {
     expect(l.opacity).toBe(100);
     expect(l.visible).toBe(true);
     expect(l.locked).toBe(false);
-    expect(l.data[5]).toBe(7);
+    expect(r.doc.cel(l.id, 1)![5]).toBe(7);
     expect(r.palette).toEqual([1, 2]);
     expect(r.color).toBe(1);
   });
@@ -54,7 +59,7 @@ describe('state', () => {
     const mk = (f: (s: any) => void) => { const s = validRaw(); f(s); bad.push(s); };
     mk((s) => { s.layers[0].data = new Uint32Array(3); });
     mk((s) => { s.layers = []; });
-    mk((s) => { s.layers = Array.from({ length: 17 }, (_, i) => layer(i + 1)); });
+    mk((s) => { s.layers = Array.from({ length: 17 }, (_, i) => rawLayer(i + 1)); });
     mk((s) => { s.layers[1].id = 1; });
     mk((s) => { s.activeId = 9; });
     mk((s) => { s.layers[0].opacity = 101; });
@@ -67,7 +72,7 @@ describe('state', () => {
 
   it('korrigiert zu kleines nextId', () => {
     const s = validRaw();
-    s.layers = [layer(1), layer(7)];
+    s.layers = [rawLayer(1), rawLayer(7)];
     s.nextId = 2;
     expect(parseState(s)!.doc.nextId).toBe(8);
   });

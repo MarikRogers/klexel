@@ -63,8 +63,9 @@ export function createLayersPanel(deps: LayersPanelDeps): LayersPanel {
     src.width = d.width; src.height = d.height;
     const img = new ImageData(d.width, d.height);
     const px = new Uint32Array(img.data.buffer);
-    for (let i = 0; i < layer.data.length; i++) {
-      const c = layer.data[i];
+    const cel = d.cel(layer.id, d.currentFrameId);
+    for (let i = 0; cel && i < cel.length; i++) {
+      const c = cel[i];
       // 0xRRGGBBAA -> little-endian 0xAABBGGRR
       px[i] = (((c & 255) << 24) | (((c >>> 8) & 255) << 16) | (((c >>> 16) & 255) << 8) | (c >>> 24)) >>> 0;
     }

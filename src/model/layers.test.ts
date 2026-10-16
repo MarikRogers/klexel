@@ -30,12 +30,14 @@ describe('Ebenen-Modell', () => {
     expect(() => doc.insertLayer(doc.createLayer(), 0)).toThrow();
     const single = new PixelDocument(2, 2);
     expect(() => single.removeLayer(1)).toThrow();
-    const mk = (id: number, len = 4) => ({ id, name: `E${id}`, visible: true, locked: false, opacity: 100, data: new Uint32Array(len) });
-    expect(() => PixelDocument.fromLayers(2, 2, [mk(1, 3)], 1, 2)).toThrow(RangeError);
-    expect(() => PixelDocument.fromLayers(2, 2, [], 1, 2)).toThrow(RangeError);
+    const mk = (id: number, len = 4) => ({ id, name: `E${id}`, visible: true, locked: false, opacity: 100, cels: new Map([[1, new Uint32Array(len)]]) });
+    const st = (layers: ReturnType<typeof mk>[], activeId: number, nextId: number) =>
+      ({ width: 2, height: 2, frames: [{ id: 1 }], currentFrameId: 1, nextFrameId: 2, layers, activeId, nextId });
+    expect(() => PixelDocument.restore(st([mk(1, 3)], 1, 2))).toThrow(RangeError);
+    expect(() => PixelDocument.restore(st([], 1, 2))).toThrow(RangeError);
     const many = Array.from({ length: 17 }, (_, i) => mk(i + 1));
-    expect(() => PixelDocument.fromLayers(2, 2, many, 1, 18)).toThrow(RangeError);
-    expect(() => PixelDocument.fromLayers(2, 2, [mk(1)], 9, 2)).toThrow(RangeError);
+    expect(() => PixelDocument.restore(st(many, 1, 18))).toThrow(RangeError);
+    expect(() => PixelDocument.restore(st([mk(1)], 9, 2))).toThrow(RangeError);
   });
 
   it('setLayerProps', () => {
@@ -59,10 +61,10 @@ describe('Ebenen-Modell', () => {
     doc.insertLayer(l2, 1);
     doc.setActive(l2.id);
     expect(doc.set(1, 1, 5)).toBe(true);
-    expect(l2.data[4]).toBe(5);
-    expect(doc.layers[0].data[4]).toBe(0);
+    expect(doc.ensureCel(l2.id, 1)[4]).toBe(5);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[4]).toBe(0);
     expect(doc.get(1, 1)).toBe(5);
-    expect(doc.data).toBe(l2.data);
+    expect(doc.data).toBe(doc.ensureCel(l2.id, 1));
   });
 
   it('drawBlockReason', () => {
@@ -110,10 +112,10 @@ describe('layerActions', () => {
 describe('Compositing', () => {
   function two(): PixelDocument {
     const doc = new PixelDocument(2, 1);
-    doc.layers[0].data[0] = 0xff0000ff;
+    doc.ensureCel(doc.layers[0].id, 1)[0] = 0xff0000ff;
     const top = doc.createLayer();
     doc.insertLayer(top, 1);
-    top.data[0] = 0x0000ffff;
+    doc.ensureCel(top.id, 1)[0] = 0x0000ffff;
     return doc;
   }
 
@@ -126,7 +128,7 @@ describe('Compositing', () => {
 
   it('transparente obere Ebene zeigt untere', () => {
     const doc = two();
-    doc.layers[1].data[0] = 0;
+    doc.ensureCel(doc.layers[1].id, 1)[0] = 0;
     doc.touch();
     expect(doc.getComposite(0, 0)).toBe(0xff0000ff);
   });
@@ -144,7 +146,7 @@ describe('Compositing', () => {
 
   it('halbtransparentes Pixel bleibt erhalten', () => {
     const doc = new PixelDocument(2, 1);
-    doc.layers[0].data[0] = 0x00ff0080;
+    doc.ensureCel(doc.layers[0].id, 1)[0] = 0x00ff0080;
     doc.touch();
     expect(doc.getComposite(0, 0)).toBe(0x00ff0080);
   });
@@ -154,7 +156,7 @@ describe('Compositing', () => {
     expect(doc.composite()[0]).toBe(0);
     doc.set(0, 0, 0x112233ff);
     expect(doc.composite()[0]).toBe(0x112233ff);
-    doc.layers[0].data[1] = 0x445566ff;
+    doc.ensureCel(doc.layers[0].id, 1)[1] = 0x445566ff;
     doc.touch();
     expect(doc.composite()[1]).toBe(0x445566ff);
   });
@@ -165,16 +167,16 @@ describe('composite: Schnellpfad', () => {
     const px = [0, 0xff0000ff, 0x00ff00ff, 0x0000ff80, 0x12345601, 0xffffff7f, 0x80008080, 0xfffffffe];
     for (const opacity of [100, 80, 33, 1]) {
       const doc = new PixelDocument(px.length, px.length);
-      doc.layers.push({ id: 2, name: 'b', visible: true, locked: false, opacity, data: new Uint32Array(px.length * px.length) });
+      doc.layers.push({ id: 2, name: 'b', visible: true, locked: false, opacity, cels: new Map() });
       for (let y = 0; y < px.length; y++) for (let x = 0; x < px.length; x++) {
-        doc.layers[0].data[y * px.length + x] = px[y];
-        doc.layers[1].data[y * px.length + x] = px[x];
+        doc.ensureCel(doc.layers[0].id, 1)[y * px.length + x] = px[y];
+        doc.ensureCel(doc.layers[1].id, 1)[y * px.length + x] = px[x];
       }
       doc.touch();
       const out = doc.composite();
       for (let i = 0; i < out.length; i++) {
-        const ref = doc.layers[1].data[i] === 0 ? doc.layers[0].data[i]
-          : blendOver(doc.layers[0].data[i] === 0 ? 0 : blendOver(0, doc.layers[0].data[i], 100), doc.layers[1].data[i], opacity);
+        const ref = doc.ensureCel(doc.layers[1].id, 1)[i] === 0 ? doc.ensureCel(doc.layers[0].id, 1)[i]
+          : blendOver(doc.ensureCel(doc.layers[0].id, 1)[i] === 0 ? 0 : blendOver(0, doc.ensureCel(doc.layers[0].id, 1)[i], 100), doc.ensureCel(doc.layers[1].id, 1)[i], opacity);
         expect(out[i]).toBe(ref);
         expect(out[i]).toBeGreaterThanOrEqual(0);
       }

@@ -36,7 +36,7 @@ describe('History: Ebenen', () => {
     expect(doc.activeId).toBe(1);
     h.undo();
     expect(doc.activeId).toBe(l.id);
-    expect(doc.getLayer(l.id)!.data[5]).toBe(0xff0000ff);
+    expect(doc.ensureCel(l.id, 1)[5]).toBe(0xff0000ff);
     h.redo();
     const n = h.addLayer()!;
     expect(n.id).not.toBe(l.id);
@@ -101,7 +101,7 @@ describe('History: Ebenen', () => {
     expect(doc.layers.length).toBe(3);
     expect(d.name.endsWith(' Kopie')).toBe(true);
     expect(d.name.length).toBeLessThanOrEqual(24);
-    expect(d.data[0]).toBe(0x11223344);
+    expect(doc.ensureCel(d.id, 1)[0]).toBe(0x11223344);
     expect(doc.activeId).toBe(d.id);
     h.undo();
     expect(doc.layers.length).toBe(2);
@@ -111,21 +111,21 @@ describe('History: Ebenen', () => {
 
   it('mergeDown', () => {
     const { doc, h } = setup();
-    doc.layers[0].data[0] = 0xff0000ff;
+    doc.ensureCel(doc.layers[0].id, 1)[0] = 0xff0000ff;
     const up = h.addLayer()!;
-    up.data[0] = 0x0000ffff;
+    doc.ensureCel(up.id, 1)[0] = 0x0000ffff;
     doc.setLayerProps(up.id, { opacity: 50 });
     expect(h.mergeDown()).toBe(true);
     expect(doc.layers.length).toBe(1);
     expect(doc.activeId).toBe(1);
-    expect(doc.layers[0].data[0]).toBe(0x800080ff);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[0]).toBe(0x800080ff);
     h.undo();
     expect(doc.layers.length).toBe(2);
-    expect(doc.layers[0].data[0]).toBe(0xff0000ff);
-    expect(doc.getLayer(up.id)!.data[0]).toBe(0x0000ffff);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[0]).toBe(0xff0000ff);
+    expect(doc.ensureCel(up.id, 1)[0]).toBe(0x0000ffff);
     expect(doc.activeId).toBe(up.id);
     h.redo();
-    expect(doc.layers[0].data[0]).toBe(0x800080ff);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[0]).toBe(0x800080ff);
     h.undo();
     doc.layers[0].locked = true;
     expect(h.mergeDown()).toBe(false);
@@ -137,24 +137,24 @@ describe('History: Ebenen', () => {
   it('mergeDown: halbtransparent über transparent behält Farbe, Alpha ca. 128', () => {
     const { doc, h } = setup();
     const up = h.addLayer()!;
-    up.data[0] = 0x00ff0080;
+    doc.ensureCel(up.id, 1)[0] = 0x00ff0080;
     expect(h.mergeDown()).toBe(true);
-    const v = doc.layers[0].data[0];
+    const v = doc.ensureCel(doc.layers[0].id, 1)[0];
     expect(v >>> 8).toBe(0x00ff00);
     expect(Math.abs((v & 255) - 128)).toBeLessThanOrEqual(1);
   });
 
   it('mergeDown: Deckkraft der unteren Ebene bleibt Eigenschaft, wird nicht eingebacken', () => {
     const { doc, h } = setup();
-    doc.layers[0].data[0] = 0xff0000ff;
+    doc.ensureCel(doc.layers[0].id, 1)[0] = 0xff0000ff;
     doc.setLayerProps(1, { opacity: 60 });
     const up = h.addLayer()!;
-    up.data[0] = 0x0000ffff;
-    up.data[1] = 0x00ff00ff;
+    doc.ensureCel(up.id, 1)[0] = 0x0000ffff;
+    doc.ensureCel(up.id, 1)[1] = 0x00ff00ff;
     expect(h.mergeDown()).toBe(true);
     expect(doc.layers[0].opacity).toBe(60);
-    expect(doc.layers[0].data[0]).toBe(0x0000ffff);
-    expect(doc.layers[0].data[1]).toBe(0x00ff00ff);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[0]).toBe(0x0000ffff);
+    expect(doc.ensureCel(doc.layers[0].id, 1)[1]).toBe(0x00ff00ff);
   });
 
   it('pixels mit Ebenenwechsel', () => {
@@ -165,10 +165,10 @@ describe('History: Ebenen', () => {
     doc.setActive(b.id);
     stroke(h, 1, 0, 0xbb);
     h.undo();
-    expect(doc.getLayer(b.id)!.data[1]).toBe(0);
-    expect(doc.getLayer(1)!.data[0]).toBe(0xaa);
+    expect(doc.ensureCel(b.id, 1)[1]).toBe(0);
+    expect(doc.ensureCel(1, 1)[0]).toBe(0xaa);
     h.undo();
-    expect(doc.getLayer(1)!.data[0]).toBe(0);
+    expect(doc.ensureCel(1, 1)[0]).toBe(0);
   });
 
   it('previewProps / commitProps', () => {

@@ -3,12 +3,12 @@ import { PixelDocument, Color, Layer, LayerProps, blendOver, layerActions } from
 interface Change { i: number; before: Color; after: Color }
 
 type Step =
-  | { kind: 'pixels'; layerId: number; changes: Change[] }
+  | { kind: 'pixels'; layerId: number; frameId: number; changes: Change[] }
   | { kind: 'add'; layer: Layer; index: number; prevActive: number }
   | { kind: 'remove'; layer: Layer; index: number; prevActive: number; nextActive: number }
   | { kind: 'move'; id: number; from: number; to: number }
   | { kind: 'props'; id: number; before: LayerProps; after: LayerProps }
-  | { kind: 'merge'; upper: Layer; index: number; lowerId: number; lowerBefore: Uint32Array; lowerAfter: Uint32Array };
+  | { kind: 'merge'; upper: Layer; index: number; frameId: number; lowerId: number; lowerBefore: Uint32Array; lowerAfter: Uint32Array };
 
 function snapshot(l: LayerProps): LayerProps {
   return { name: l.name, visible: l.visible, locked: l.locked, opacity: l.opacity };
@@ -23,6 +23,7 @@ export class History {
   private redoStack: Step[] = [];
   private current: Map<number, Change> | null = null;
   private currentLayerId = 0;
+  private currentFrameId = 0;
   private pendingProps: { id: number; before: LayerProps } | null = null;
 
   constructor(private doc: PixelDocument, private limit = 100) {}
@@ -37,38 +38,44 @@ export class History {
   begin(): void {
     this.current = new Map();
     this.currentLayerId = this.doc.activeId;
+    this.currentFrameId = this.doc.currentFrameId;
   }
 
   set(x: number, y: number, c: Color): boolean {
     if (!this.doc.inBounds(x, y)) return false;
     const i = y * this.doc.width + x;
-    const before = this.doc.data[i];
+    const before = this.doc.get(x, y);
     if (before === c) return false;
     if (this.current) {
       const existing = this.current.get(i);
       if (existing) existing.after = c;
       else this.current.set(i, { i, before, after: c });
     }
-    this.doc.data[i] = c;
-    this.doc.touch();
+    const doc = this.doc;
+    doc.ensureCel(doc.activeId, doc.currentFrameId)[i] = c;
+    doc.touch(doc.currentFrameId);
     return true;
   }
 
   commit(): void {
     const changes = this.current ? [...this.current.values()] : [];
     const layerId = this.currentLayerId;
+    const frameId = this.currentFrameId;
     this.current = null;
     if (changes.length === 0) return;
-    this.push({ kind: 'pixels', layerId, changes });
+    this.push({ kind: 'pixels', layerId, frameId, changes });
   }
 
   /** Verwirft den laufenden Strich und stellt die Pixel wieder her. */
   cancel(): void {
     if (!this.current) return;
-    const layer = this.doc.getLayer(this.currentLayerId);
-    if (layer) for (const ch of this.current.values()) layer.data[ch.i] = ch.before;
+    const { currentLayerId: layerId, currentFrameId: frameId } = this;
+    if (this.doc.getLayer(layerId) && this.doc.frameIndex(frameId) >= 0) {
+      const cel = this.doc.ensureCel(layerId, frameId);
+      for (const ch of this.current.values()) cel[ch.i] = ch.before;
+    }
     this.current = null;
-    this.doc.touch();
+    this.doc.touch(frameId);
   }
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
@@ -103,7 +110,8 @@ export class History {
     layer.visible = src.visible;
     layer.locked = src.locked;
     layer.opacity = src.opacity;
-    layer.data.set(src.data);
+    const srcCel = src.cels.get(this.doc.currentFrameId);
+    if (srcCel) layer.cels.set(this.doc.currentFrameId, srcCel.slice());
     return this.insertNew(layer);
   }
 
@@ -143,16 +151,20 @@ export class History {
     const index = this.doc.indexOf(this.doc.activeId);
     const upper = this.doc.layers[index];
     const lower = this.doc.layers[index - 1];
-    const lowerBefore = lower.data.slice();
-    const lowerAfter = lower.data.slice();
-    for (let i = 0; i < lowerAfter.length; i++) {
-      if (upper.data[i] !== 0) lowerAfter[i] = blendOver(lowerBefore[i], upper.data[i], upper.opacity);
+    const frameId = this.doc.currentFrameId;
+    const lowerBefore = (lower.cels.get(frameId) ?? new Uint32Array(this.doc.width * this.doc.height)).slice();
+    const lowerAfter = lowerBefore.slice();
+    const upperCel = upper.cels.get(frameId);
+    if (upperCel) {
+      for (let i = 0; i < lowerAfter.length; i++) {
+        if (upperCel[i] !== 0) lowerAfter[i] = blendOver(lowerBefore[i], upperCel[i], upper.opacity);
+      }
     }
     this.doc.removeLayer(upper.id);
-    lower.data.set(lowerAfter);
+    this.doc.ensureCel(lower.id, frameId).set(lowerAfter);
     this.doc.setActive(lower.id);
     this.doc.touch();
-    this.push({ kind: 'merge', upper, index, lowerId: lower.id, lowerBefore, lowerAfter });
+    this.push({ kind: 'merge', upper, index, frameId, lowerId: lower.id, lowerBefore, lowerAfter });
     return true;
   }
 
@@ -199,10 +211,10 @@ export class History {
     const undo = dir === 'undo';
     switch (step.kind) {
       case 'pixels': {
-        const layer = doc.getLayer(step.layerId);
-        if (!layer) return;
-        for (const ch of step.changes) layer.data[ch.i] = undo ? ch.before : ch.after;
-        doc.touch();
+        if (!doc.getLayer(step.layerId) || doc.frameIndex(step.frameId) < 0) return;
+        const cel = doc.ensureCel(step.layerId, step.frameId);
+        for (const ch of step.changes) cel[ch.i] = undo ? ch.before : ch.after;
+        doc.touch(step.frameId);
         return;
       }
       case 'add':
@@ -234,11 +246,11 @@ export class History {
         if (!lower) return;
         if (undo) {
           doc.insertLayer(step.upper, step.index);
-          lower.data.set(step.lowerBefore);
+          doc.ensureCel(lower.id, step.frameId).set(step.lowerBefore);
           doc.setActive(step.upper.id);
         } else {
           doc.removeLayer(step.upper.id);
-          lower.data.set(step.lowerAfter);
+          doc.ensureCel(lower.id, step.frameId).set(step.lowerAfter);
           doc.setActive(step.lowerId);
         }
         doc.touch();
