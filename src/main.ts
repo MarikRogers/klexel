@@ -15,7 +15,7 @@ import { createSelectionBar } from './ui/selectionBar';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
-import { exceedsTapThreshold, appendPathPoint } from './edit/gestures';
+import { exceedsTapThreshold, appendPathPoint, classifyGesture } from './edit/gestures';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
@@ -183,10 +183,11 @@ function selectionMove(sx: number, sy: number, x: number, y: number): void {
   if (g.kind === 'pending') {
     if (g.path) appendPathPoint(g.path, x, y); // Lasso sammelt ab Pointerdown, zeigt aber erst über der Schwelle
     if (!exceedsTapThreshold(g.sx, g.sy, sx, sy)) return;
-    if (g.inside) g = selGesture = { kind: 'move', x: g.x, y: g.y };
-    else if (selShape === 'lasso') g = selGesture = { kind: 'lasso', points: g.path ?? [[g.x, g.y]] };
-    else if (selShape === 'wand') { selGesture = null; return; } // Zauberstab reagiert nur auf Tippen
-    else g = selGesture = { kind: 'rect', x0: g.x, y0: g.y, x1: g.x, y1: g.y };
+    const k = classifyGesture(selShape, selMode, g.inside, true);
+    if (k === 'move') g = selGesture = { kind: 'move', x: g.x, y: g.y };
+    else if (k === 'lasso') g = selGesture = { kind: 'lasso', points: g.path ?? [[g.x, g.y]] };
+    else if (k === 'rect') g = selGesture = { kind: 'rect', x0: g.x, y0: g.y, x1: g.x, y1: g.y };
+    else { selGesture = null; return; } // Zauberstab reagiert nur auf Tippen
   }
   if (g.kind === 'lasso') {
     appendPathPoint(g.points, x, y);
@@ -210,11 +211,9 @@ function selectionUp(): void {
   const g = selGesture; selGesture = null; view.selectionPreview = null;
   if (!g) return;
   if (g.kind === 'pending') {
-    if (g.inside) return;
-    if (selShape === 'wand') {
-      wandSelect(session, doc, g.x, g.y, wandAll, selMode);
-      scheduleSave();
-    } else if (selMode === 'replace') { session.deselect(); scheduleSave(); }
+    const k = classifyGesture(selShape, selMode, g.inside, false);
+    if (k === 'wand') { wandSelect(session, doc, g.x, g.y, wandAll, selMode); scheduleSave(); }
+    else if (k === 'deselect') { session.deselect(); scheduleSave(); }
     return;
   }
   if (g.kind === 'lasso') {

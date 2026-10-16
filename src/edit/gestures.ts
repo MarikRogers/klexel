@@ -12,3 +12,16 @@ export function appendPathPoint(points: Array<[number, number]>, x: number, y: n
   points.push([x, y]);
   return true;
 }
+
+export type SelShape = 'rect' | 'lasso' | 'wand';
+export type SelGestureKind = 'move' | 'rect' | 'lasso' | 'wand' | 'deselect' | 'none';
+
+/**
+ * Was eine Auswahl-Geste bewirkt. `startedInside`: Zeiger begann in der Auswahl im Modus Neu.
+ * Über der Schwelle: Verschieben bzw. Form aufziehen; darunter (Tap): Zauberstab immer, sonst Abwählen (nur Neu, außerhalb).
+ */
+export function classifyGesture(shape: SelShape, mode: 'replace' | 'add' | 'subtract', startedInside: boolean, exceeded: boolean): SelGestureKind {
+  if (exceeded) return startedInside ? 'move' : shape === 'wand' ? 'none' : shape;
+  if (shape === 'wand') return 'wand';
+  return !startedInside && mode === 'replace' ? 'deselect' : 'none';
+}

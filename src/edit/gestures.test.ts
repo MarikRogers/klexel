@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { exceedsTapThreshold, appendPathPoint } from './gestures';
+import { exceedsTapThreshold, appendPathPoint, classifyGesture } from './gestures';
 
 describe('exceedsTapThreshold', () => {
   it('unter der Schwelle: Tap', () => {
@@ -39,5 +39,34 @@ describe('appendPathPoint', () => {
     const pts: Array<[number, number]> = [[1, 2], [2, 2]];
     expect(appendPathPoint(pts, 1, 2)).toBe(true);
     expect(pts).toHaveLength(3);
+  });
+});
+
+describe('classifyGesture', () => {
+  const c = classifyGesture;
+  it('wand tap always uses the wand (inside or outside, any mode)', () => {
+    expect(c('wand', 'replace', true, false)).toBe('wand');
+    expect(c('wand', 'replace', false, false)).toBe('wand');
+    expect(c('wand', 'add', false, false)).toBe('wand');
+    expect(c('wand', 'subtract', false, false)).toBe('wand');
+  });
+  it('wand drag: outside does nothing, inside (replace) moves', () => {
+    expect(c('wand', 'replace', false, true)).toBe('none');
+    expect(c('wand', 'add', false, true)).toBe('none');
+    expect(c('wand', 'replace', true, true)).toBe('move');
+  });
+  it('rect/lasso tap inside does nothing, outside deselects in replace only', () => {
+    for (const s of ['rect', 'lasso'] as const) {
+      expect(c(s, 'replace', true, false)).toBe('none');
+      expect(c(s, 'replace', false, false)).toBe('deselect');
+      expect(c(s, 'add', false, false)).toBe('none');
+      expect(c(s, 'subtract', false, false)).toBe('none');
+    }
+  });
+  it('rect/lasso drag: inside moves, outside draws the shape', () => {
+    expect(c('rect', 'replace', true, true)).toBe('move');
+    expect(c('lasso', 'replace', true, true)).toBe('move');
+    expect(c('rect', 'replace', false, true)).toBe('rect');
+    expect(c('lasso', 'add', false, true)).toBe('lasso');
   });
 });

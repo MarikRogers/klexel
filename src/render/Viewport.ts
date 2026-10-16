@@ -1,6 +1,6 @@
 import { PixelDocument, Color } from '../model/Document';
 import { toCss } from '../palette/palettes';
-import { edgeRuns } from './edgeRuns';
+import { edgeRuns, whiteEdges } from './edgeRuns';
 import type { SelectionEdge } from '../model/Selection';
 import type { Floating } from '../edit/SelectionSession';
 
@@ -164,13 +164,20 @@ export class Viewport {
         if (r.dir === 'h') ctx.lineTo(sx + r.len * z, sy); else ctx.lineTo(sx, sy + r.len * z);
       }
       outline('#000', []); ctx.stroke();
-      outline('#fff', [4, 4]); ctx.stroke();
+      // Weiß je Einzelkante nach Position (x + y gerade), unabhängig von Lauflänge und Zoom
+      ctx.beginPath();
+      for (const e of whiteEdges(ov.edges)) {
+        const sx = x + e.x * z + .5, sy = y + e.y * z + .5;
+        ctx.moveTo(sx, sy);
+        if (e.dir === 'h') ctx.lineTo(sx + z, sy); else ctx.lineTo(sx, sy + z);
+      }
+      outline('#fff', []); ctx.stroke();
     }
     const p = this.selectionPreview;
     if (p && p.kind === 'path') {
       if (p.points.length) {
-        // Pfad in Pixelmitten; dünne Linie zurück zum Startpunkt zeigt das spätere Schließen
-        const at = ([px, py]: [number, number]): [number, number] => [x + (px + .5) * z, y + (py + .5) * z];
+        // Pfad an den Pixelecken (wie die Polygon-Eckpunkte), im selben Raster wie der Rahmen; dünne Linie zurück zum Startpunkt zeigt das spätere Schließen
+        const at = ([px, py]: [number, number]): [number, number] => [x + px * z + .5, y + py * z + .5];
         ctx.beginPath();
         p.points.forEach((pt, i) => { const [sx, sy] = at(pt); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); });
         outline('#000', []); ctx.stroke();

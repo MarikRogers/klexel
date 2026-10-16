@@ -23,3 +23,17 @@ export function edgeRuns(edges: SelectionEdge[]): EdgeRun[] {
   cache.set(edges, out);
   return out;
 }
+
+const whiteCache = new WeakMap<SelectionEdge[], SelectionEdge[]>();
+
+/**
+ * Einzelkanten, die im Rahmen weiß gezeichnet werden (Rest schwarz): Parität von x + y.
+ * Absolute Position statt Strichmuster, damit auch kurze Läufe (Diagonalen, Dithering) beide Farben zeigen.
+ */
+export function whiteEdges(edges: SelectionEdge[]): SelectionEdge[] {
+  const hit = whiteCache.get(edges);
+  if (hit) return hit;
+  const out = edges.filter(e => (e.x + e.y) % 2 === 0);
+  whiteCache.set(edges, out);
+  return out;
+}
