@@ -9,6 +9,7 @@ import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
 import { showToast } from './ui/toast';
 import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
+import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
 type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
@@ -255,13 +256,7 @@ $<HTMLDialogElement>('newDlg').addEventListener('close', function (this: HTMLDia
 });
 $('export').onclick = async () => {
   const scale = Math.max(1, Math.floor(512 / Math.max(doc.width, doc.height)));
-  const blob = await exportPng(doc, scale);
-  const file = new File([blob], 'pixelart.png', { type: 'image/png' });
-  if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); return; } catch { /* abgebrochen */ }
-  }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pixelart.png'; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  await saveBlob(await exportPng(doc, scale), 'pixelart.png', 'image/png');
 };
 $('import').onclick = () => $('file').click();
 $<HTMLInputElement>('file').onchange = async e => {
