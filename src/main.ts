@@ -12,7 +12,7 @@ type ToolName = 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellips
 type ShapeTool = 'line' | 'rect' | 'ellipse';
 
 const svg = (body: string) =>
-  `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const ICON = {
   // Radiergummi: schräger Block, Gummiteil gefüllt
   eraser: svg('<g transform="rotate(-45 12 12)"><rect x="3" y="8" width="18" height="8" rx="2"/><rect x="11" y="8" width="10" height="8" rx="2" fill="currentColor" fill-opacity=".4"/></g>'),
