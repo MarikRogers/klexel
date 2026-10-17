@@ -155,3 +155,22 @@ dialog input[type=number] { width:5em; font-size:18px; }
   #selbar .selbar-commit { flex-direction:column; gap:0; font-size:10px; min-height:48px; }
 }
 #app.collapsed #selbar { padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
+
+/* Dialog "Konsolenexport" */
+#consoleDlg { width:min(94vw, 440px); padding:0; }
+#consoleDlg::backdrop { background:rgba(0,0,0,.6); }
+#consoleDlg .cx { padding:14px 16px; max-height:calc(100dvh - 40px); overflow-y:auto; }
+#consoleDlg h2 { margin:0 0 6px; font-size:20px; }
+#consoleDlg select, #consoleDlg input { min-height:40px; font-size:16px; }
+.cx-preview { display:block; width:100%; image-rendering:pixelated; border-radius:6px; margin:8px 0; background:#16161c; }
+.cx-adjust { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:4px 0; color:#ffa300; }
+.cx-adjust button, .cx-actions button, .cx-issue-actions button { min-height:44px; padding:0 14px; }
+.cx-orig { touch-action:none; user-select:none; -webkit-user-select:none; }
+.cx-note { margin:4px 0; font-size:13px; opacity:.8; }
+.cx-issue { margin:8px 0; padding:8px 10px; border:1px solid #ffa300; border-radius:8px; font-size:14px; }
+.cx-issue p { margin:0 0 8px; }
+.cx-issue-actions { display:flex; gap:8px; }
+.cx-issue-actions button { flex:1 1 0; }
+.cx-issue-actions button.active { border-color:var(--accent); }
+.cx-actions { display:flex; gap:8px; margin-top:10px; }
+.cx-actions button { flex:1 1 0; }
