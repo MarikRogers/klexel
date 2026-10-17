@@ -87,3 +87,10 @@ Nicht Teil dieser Spec: Import von `.p8`/`.gfx`, Sprite-Flags, Map-/Sound-/Code-
 - Ob Picotron die Textform lädt; bei Nein komprimiertes Format.
 - Genauer Platz des Einstiegs in der Oberfläche.
 - Bei PICO-8 zusätzlich Spritegrößen 16/32 als Block-Markierung (nur Hinweis, keine Funktion in v1).
+
+## Stand nach der Umsetzung (2026-10-18, gegen echte Programme geprüft)
+
+- **PICO-8:** `.p8` mit Kopf, leerem `__lua__` und `__gfx__` lädt; `sget`-Werte stimmten.
+- **Picotron-Palette:** Der Sprite-Editor bietet **32** Farben an (nicht 64). Indexreihenfolge laut Sprite-Blatt: 0–15 wie PICO-8, 16–31 siehe `src/palette/picotron.ts`. Die Reihenfolge im Palettenfenster des Editors weicht davon ab.
+- **Picotron-Datei:** Die unkomprimierte **Textform wird nicht geladen** (Absturz bzw. leeres Blatt). Geschrieben wird stattdessen: Kopf `--[[pod,…]]`, Container `lz4 ` + Größen (komprimiert, unkomprimiert) + LZ4-Block (nur Rohdaten), darin die Lua-Tabelle mit 256 Einträgen und binären `pxu`-Bitmaps im RAW-Modus (`pxu `, `0x43`, `0x10`, Breite, Höhe, ein Byte je Pixel). In Picotron bestätigt.
+- **Offen:** Ob Picotron Palettenindex 0 als durchsichtig behandelt; Hinweise für Sprites ab 128 (PICO-8, gemeinsam mit der Map) und Startnummer 0 (Picotron) sind nicht umgesetzt.
