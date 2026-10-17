@@ -1,5 +1,5 @@
-const CACHE = 'pixelart-v4';
-const STATIC = ['./', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
+const CACHE = 'pixelart-v5';
+const STATIC = ['./', 'impressum.html', 'datenschutz.html', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Beim Installieren alles Nötige vorab laden, inkl. der gehashten JS/CSS-Dateien aus index.html,
 // damit die App schon nach dem ersten Besuch offline startet.
@@ -25,11 +25,13 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.mode === 'navigate') {
+    // Nur die App selbst ersetzt den Cache-Eintrag './'; Impressum/Datenschutz dürfen ihn nicht überschreiben.
+    const isApp = new URL(e.request.url).pathname === new URL('./', self.registration.scope).pathname;
     e.respondWith(
       fetch(e.request).then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./', copy)); }
+        if (res.ok && isApp) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./', copy)); }
         return res;
-      }).catch(() => caches.match('./'))
+      }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./')))
     );
     return;
   }

@@ -4,11 +4,9 @@
  * Nur http(s)-Adressen werden geöffnet.
  */
 export const LINKS: Record<'support' | 'feedback' | 'privacy' | 'imprint', string> = {
-  // TODO: Spendenlink eintragen, z. B. 'https://ko-fi.com/<dein-name>'
-  support: '',
+  support: 'https://ko-fi.com/mariusschluesener',
   feedback: 'https://github.com/MarikRogers/klexel/issues',
-  // TODO: Datenschutzerklärung eintragen (Seite oder Dokument)
-  privacy: '',
-  // TODO: Impressum eintragen (in Deutschland meist Pflicht, sobald Spenden angenommen werden)
-  imprint: '',
+  // Statische Seiten aus public/, vom Service Worker vorab gecacht
+  privacy: 'https://marikrogers.github.io/klexel/datenschutz.html',
+  imprint: 'https://marikrogers.github.io/klexel/impressum.html',
 };
