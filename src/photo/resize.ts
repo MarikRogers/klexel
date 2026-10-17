@@ -75,3 +75,12 @@ export function resizePhoto(src: PhotoImage, o: ResizeOptions): PhotoImage {
   for (let y = 0; y < ph; y++) pixels.set(placed.subarray(y * pw, (y + 1) * pw), (oy + y) * width + ox);
   return { width, height, pixels };
 }
+
+/** Arbeitskopie: verkleinert das Foto (Flächenmittel) auf höchstens `max` an der längsten Seite; sonst dasselbe Objekt. */
+export function shrinkTo(src: PhotoImage, max: number): PhotoImage {
+  const longest = Math.max(src.width, src.height);
+  if (longest <= max) return src;
+  const k = max / longest;
+  const width = Math.max(1, Math.round(src.width * k)), height = Math.max(1, Math.round(src.height * k));
+  return { width, height, pixels: boxResize(src, { x: 0, y: 0, w: src.width, h: src.height }, width, height) };
+}

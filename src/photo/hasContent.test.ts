@@ -20,6 +20,18 @@ describe('docHasContent', () => {
     doc.setCurrentFrame(doc.frames[0].id);
     expect(docHasContent(doc)).toBe(true);
   });
+  it('Inhalt in einer versteckten Ebene zählt mit', () => {
+    const doc = new PixelDocument(4, 4);
+    doc.set(1, 1, 0xff0000ff);
+    doc.setLayerProps(doc.layers[0].id, { visible: false });
+    expect(docHasContent(doc)).toBe(true);
+  });
+  it('Inhalt in einer Ebene mit Deckkraft 0 zählt mit', () => {
+    const doc = new PixelDocument(4, 4);
+    doc.set(1, 1, 0xff0000ff);
+    doc.setLayerProps(doc.layers[0].id, { opacity: 0 });
+    expect(docHasContent(doc)).toBe(true);
+  });
   it('nur vollständig transparente Pixel: false', () => {
     const doc = new PixelDocument(4, 4);
     doc.set(0, 0, 0x12345600);

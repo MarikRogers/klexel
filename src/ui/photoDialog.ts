@@ -1,12 +1,13 @@
 import { PixelDocument, MAX_SIZE, type Color } from '../model/Document';
 import { PICO8 } from '../palette/palettes';
 import { PICOTRON } from '../palette/picotron';
-import { resizePhoto, cropRect, type FitMode, type PhotoImage, type ResizeOptions } from '../photo/resize';
+import { resizePhoto, cropRect, shrinkTo, type FitMode, type PhotoImage, type ResizeOptions } from '../photo/resize';
 import { quantize, type Dither } from '../photo/quantize';
 import { docHasContent } from '../photo/hasContent';
 import { showToast } from './toast';
 
 const MAX_DECODE = 4096; // längste Seite beim Dekodieren (Speicher auf dem Handy schonen)
+const MAX_WORK = 1024; // Arbeitskopie für die Vorschau: reicht für Ziele bis 128 und hält das Ziehen flüssig
 
 export interface PhotoDialogDeps {
   getDoc(): PixelDocument;
@@ -65,6 +66,13 @@ export function createPhotoDialog(deps: PhotoDialogDeps): { open(file: File): Pr
   let panX = 0.5, panY = 0.5;
   let showOriginal = false;
   let result: PhotoImage | null = null;
+  let cacheKey = '', cacheResized: PhotoImage | null = null; // Verkleinerung nur neu rechnen, wenn sich Größe/Modus/Ausschnitt ändern
+  let timer = 0;
+  /** Aktualisierung gebündelt (Ziehen, Tippen): höchstens etwa einmal je Bildschirmbild. Timer statt rAF, damit nichts hängen bleibt, wenn die Seite kurz im Hintergrund war. */
+  const schedule = () => {
+    if (timer) return;
+    timer = window.setTimeout(() => { timer = 0; recompute(); }, 16);
+  };
 
   const num = (el: HTMLInputElement, fallback: number) => {
     const raw = el.value.trim();
@@ -87,7 +95,10 @@ export function createPhotoDialog(deps: PhotoDialogDeps): { open(file: File): Pr
     const mode = modeSel.value;
     whWrap.hidden = mode === 'keep';
     longWrap.hidden = mode !== 'keep';
-    const resized = resizePhoto(photo, options());
+    const o = options();
+    const key = `${o.mode}|${o.width}|${o.height}|${o.longest}|${o.panX}|${o.panY}`;
+    if (key !== cacheKey || !cacheResized) { cacheResized = resizePhoto(photo, o); cacheKey = key; }
+    const resized = cacheResized;
     const pal = palette();
     const skipFirst = palSel.value !== 'current';
     const need = skipFirst ? 2 : 1;
@@ -120,7 +131,7 @@ export function createPhotoDialog(deps: PhotoDialogDeps): { open(file: File): Pr
   }
 
   for (const el of [modeSel, palSel, ditherSel]) el.onchange = () => { recompute(); };
-  for (const el of [wInput, hInput, longInput]) el.oninput = () => { recompute(); };
+  for (const el of [wInput, hInput, longInput]) el.oninput = schedule;
   for (const b of dlg.querySelectorAll<HTMLButtonElement>('.ph-presets button')) {
     b.onclick = () => {
       const s = b.dataset.size!;
@@ -148,7 +159,7 @@ export function createPhotoDialog(deps: PhotoDialogDeps): { open(file: File): Pr
     const rangeX = photo.width - rect.w, rangeY = photo.height - rect.h;
     if (rangeX > 0) panX = Math.min(1, Math.max(0, (drag.panX * rangeX - dx) / rangeX));
     if (rangeY > 0) panY = Math.min(1, Math.max(0, (drag.panY * rangeY - dy) / rangeY));
-    recompute();
+    schedule();
   });
   for (const ev of ['pointerup', 'pointercancel'] as const) canvas.addEventListener(ev, () => { drag = null; });
 
@@ -195,7 +206,8 @@ export function createPhotoDialog(deps: PhotoDialogDeps): { open(file: File): Pr
   return {
     async open(file) {
       try {
-        photo = await decode(file);
+        photo = shrinkTo(await decode(file), MAX_WORK);
+        cacheKey = ''; cacheResized = null;
       } catch (err) {
         console.error(err);
         showToast('Bild konnte nicht geladen werden');

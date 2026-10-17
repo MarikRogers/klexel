@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { keepSize, cropRect, boxResize, resizePhoto, type PhotoImage } from './resize';
+import { keepSize, cropRect, boxResize, resizePhoto, shrinkTo, type PhotoImage } from './resize';
 
 function img(w: number, h: number, f: (x: number, y: number) => number): PhotoImage {
   const pixels = new Uint32Array(w * h);
@@ -89,5 +89,17 @@ describe('resizePhoto', () => {
   it('komplett transparentes Foto bleibt komplett transparent', () => {
     const out = resizePhoto(img(8, 8, () => 0), { mode: 'fit', width: 4, height: 4, longest: 4, panX: 0.5, panY: 0.5 });
     expect([...out.pixels].every(v => v === 0)).toBe(true);
+  });
+});
+
+describe('shrinkTo', () => {
+  it('verkleinert auf höchstens max an der längsten Seite, Verhältnis bleibt', () => {
+    const out = shrinkTo(img(2000, 1000, () => RED), 1024);
+    expect(out.width).toBe(1024); expect(out.height).toBe(512);
+    expect(out.pixels.every(v => v === RED)).toBe(true);
+  });
+  it('kleinere Fotos bleiben unverändert (gleiches Objekt)', () => {
+    const small = img(100, 50, () => RED);
+    expect(shrinkTo(small, 1024)).toBe(small);
   });
 });
