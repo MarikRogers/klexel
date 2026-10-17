@@ -13,6 +13,7 @@ import { createLayersPanel } from './ui/layersPanel';
 import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { createAboutDialog } from './ui/aboutDialog';
+import { createPhotoDialog } from './ui/photoDialog';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
@@ -37,6 +38,7 @@ app.innerHTML = `
     <div class="row row-file">
       <button id="new" title="Neu">＋</button>
       <button id="import" title="PNG laden">⤒</button>
+      <button id="photo" title="Foto laden">🖼</button>
       <button id="export" title="PNG speichern">⤓</button>
     </div>
   </div>
@@ -62,7 +64,8 @@ app.innerHTML = `
     <label>Höhe <input id="nh" type="number" min="1" max="128" value="32" /></label>
     <div class="row"><button value="cancel">Abbrechen</button><button value="ok">Anlegen</button></div>
   </form></dialog>
-  <input id="file" type="file" accept="image/png" hidden />`;
+  <input id="file" type="file" accept="image/png" hidden />
+  <input id="photoFile" type="file" accept="image/*" hidden />`;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = app.querySelector('canvas')!;
@@ -394,6 +397,19 @@ $('export').onclick = async () => {
   settleSelection();
   const scale = Math.max(1, Math.floor(512 / Math.max(doc.width, doc.height)));
   await saveBlob(await exportPng(doc, scale), 'pixelart.png', 'image/png');
+};
+// "Foto": Bild laden, herunterrechnen und auf eine Palette abbilden (ersetzt nach Rückfrage das aktuelle Bild)
+const photoDlg = createPhotoDialog({
+  getDoc: () => doc,
+  getPalette: () => palette,
+  onApply: d => { attach(d); scheduleSave(); },
+});
+$('photo').onclick = () => { settleSelection(); $('photoFile').click(); };
+$<HTMLInputElement>('photoFile').onchange = async e => {
+  const input = e.target as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = '';
+  if (f) await photoDlg.open(f);
 };
 $('import').onclick = () => { settleSelection(); $('file').click(); };
 $<HTMLInputElement>('file').onchange = async e => {
