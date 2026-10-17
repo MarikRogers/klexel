@@ -41,7 +41,7 @@ export function defaultCell(target: ConsoleTarget, frames: ExportFrame[]): numbe
 export function buildExportPlan(frames: ExportFrame[], opts: ExportOptions): ExportPlan {
   const palette = TARGET_PALETTE[opts.target];
   const cell = opts.target === 'pico8' ? 8 : opts.cell;
-  const start = Number.isFinite(opts.start) ? Math.max(0, Math.floor(opts.start)) : 1;
+  const start = Number.isFinite(opts.start) ? Math.min(MAX_INDEX + 1, Math.max(0, Math.floor(opts.start))) : 1;
   const adjustedColors = new Set<Color>();
   const issues: PlanIssue[] = [];
 
@@ -67,15 +67,16 @@ export function buildExportPlan(frames: ExportFrame[], opts: ExportOptions): Exp
     if (bw === 1 && bh === 1) {
       frames.forEach((f, k) => all.push(cut(toImg(f), 0, 0, 8, start + k)));
     } else {
-      const slots = Math.floor(PICO8_SHEET_CELLS / bw);
-      const startRow = Math.floor(start / PICO8_SHEET_CELLS);
-      frames.forEach((f, k) => {
-        const img = toImg(f);
-        const top = (startRow + Math.floor(k / slots) * bh) * PICO8_SHEET_CELLS + (k % slots) * bw;
+      // Blöcke nacheinander ab der Startnummer; passt ein Block nicht mehr in die Zeile, beginnt die nächste Blockzeile
+      let col = start % PICO8_SHEET_CELLS, row = Math.floor(start / PICO8_SHEET_CELLS);
+      for (const f of frames) {
+        if (col + bw > PICO8_SHEET_CELLS) { col = 0; row += bh; }
+        const img = toImg(f), top = row * PICO8_SHEET_CELLS + col;
         for (let cy = 0; cy < bh; cy++) for (let cx = 0; cx < bw; cx++) {
           all.push(cut(img, cx * 8, cy * 8, 8, top + cy * PICO8_SHEET_CELLS + cx));
         }
-      });
+        col += bw;
+      }
     }
   }
 

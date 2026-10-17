@@ -55,7 +55,8 @@ export function createConsoleExportDialog(): { open(doc: PixelDocument): void } 
   let all: ExportPlan | null = null;
 
   function options(truncateNow: boolean): ExportOptions {
-    const start = Math.round(Number(startInput.value));
+    const raw = startInput.value.trim();
+    const start = raw === '' ? 1 : Math.round(Number(raw)); // leeres Feld = Vorgabe 1
     return {
       target: targetSel.value as ConsoleTarget,
       mode: modeSel.value as ExportMode,

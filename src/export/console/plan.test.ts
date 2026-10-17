@@ -58,6 +58,13 @@ describe('buildExportPlan: slice', () => {
     expect(buildExportPlan([solid(16, 16)], opts({ start: 256, truncate: true })).sprites).toHaveLength(0);
   });
 
+  it('riesige Startnummer verhält sich wie 256: empty-Problem, Indizes bleiben klein', () => {
+    const p = buildExportPlan([solid(32, 32)], opts({ start: 1e9 }));
+    expect(p.issues.map(i => i.kind)).toContain('empty');
+    expect(p.blocked).toBe(true);
+    expect(Math.max(...p.sprites.map(s => s.index))).toBeLessThan(300);
+  });
+
   it('komplett transparentes Bild: alle Indizes 0, nichts angepasst', () => {
     const p = buildExportPlan([solid(16, 16, 0)], opts({}));
     expect(p.adjusted).toBe(0);
@@ -84,17 +91,22 @@ describe('buildExportPlan: frames', () => {
     expect(p.sprites.map(s => s.index)).toEqual([1, 2, 3]);
   });
 
-  it('PICO-8, 17 Frames à 16×16: Blöcke 2×2, Blockpositionen ohne Überlauf', () => {
+  it('PICO-8, 17 Frames à 16×16, Start 1: 2×2-Blöcke hintereinander ab Zelle 1, Umbruch ohne Überlauf', () => {
     const frames = Array.from({ length: 17 }, () => solid(16, 16));
     const p = buildExportPlan(frames, opts({ target: 'pico8', mode: 'frames' }));
     expect(p.issues).toEqual([]);
     expect(p.sprites).toHaveLength(17 * 4);
     const idx = p.sprites.map(s => s.index);
-    expect(idx.slice(0, 4)).toEqual([0, 1, 16, 17]); // Block 0 oben links
-    expect(idx.slice(7 * 4, 7 * 4 + 4)).toEqual([14, 15, 30, 31]); // Block 7: letzter in der Zeile
-    expect(idx.slice(8 * 4, 8 * 4 + 4)).toEqual([32, 33, 48, 49]); // Block 8: nächste Blockzeile
+    expect(idx.slice(0, 4)).toEqual([1, 2, 17, 18]); // erster Block beginnt bei der Startnummer
+    expect(idx.slice(6 * 4, 6 * 4 + 4)).toEqual([13, 14, 29, 30]); // siebter Block: letzter, der noch passt
+    expect(idx.slice(7 * 4, 7 * 4 + 4)).toEqual([32, 33, 48, 49]); // Umbruch: nächste Blockzeile ab Spalte 0
     expect(new Set(idx).size).toBe(idx.length);
-    expect(idx.every(i => i % 16 <= 15 && i <= 255)).toBe(true);
+    expect(idx.every(i => i <= 255)).toBe(true);
+  });
+
+  it('PICO-8, 16×16-Frames, Start 0: erster Block bei Zelle 0', () => {
+    const p = buildExportPlan([solid(16, 16), solid(16, 16)], opts({ target: 'pico8', mode: 'frames', start: 0 }));
+    expect(p.sprites.map(s => s.index).slice(0, 8)).toEqual([0, 1, 16, 17, 2, 3, 18, 19]);
   });
 
   it('Picotron, 24×24-Frame bei Zelle 16: crop-Problem, bei truncate auf 16×16 beschnitten', () => {
