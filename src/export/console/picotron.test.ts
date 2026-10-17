@@ -47,9 +47,9 @@ describe('writePicotron', () => {
 });
 
 describe('picotronPaletteTest', () => {
-  it('63 Sprites, Sprite k einfarbig in Palettenindex k', () => {
+  it('31 Sprites, Sprite k einfarbig in Palettenindex k', () => {
     const p = picotronPaletteTest();
-    expect(p.sprites).toHaveLength(63);
+    expect(p.sprites).toHaveLength(31);
     for (const s of p.sprites) {
       expect(s.w).toBe(16);
       expect(s.indices.every(v => v === s.index)).toBe(true);

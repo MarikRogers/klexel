@@ -3,7 +3,6 @@ import { buildExportPlan, defaultCell, type ExportFrame, type ExportMode, type E
 import type { ConsoleTarget } from '../export/console/reduce';
 import { writePico8 } from '../export/console/pico8';
 import { writePicotron } from '../export/console/picotron';
-import { PICOTRON_IS_PLACEHOLDER } from '../palette/picotron';
 import { saveBlob } from '../export/saveBlob';
 import { showToast } from './toast';
 
@@ -27,7 +26,6 @@ export function createConsoleExportDialog(): { open(doc: PixelDocument): void } 
         <span class="cx-adjusttext" role="status"></span>
         <button type="button" class="cx-orig">Original halten</button>
       </div>
-      <p class="cx-note" hidden></p>
       <div class="cx-issues"></div>
       <div class="cx-actions">
         <button type="button" class="cx-export">Exportieren</button>
@@ -46,7 +44,6 @@ export function createConsoleExportDialog(): { open(doc: PixelDocument): void } 
   const adjustBox = q<HTMLElement>('.cx-adjust');
   const adjustText = q<HTMLElement>('.cx-adjusttext');
   const origBtn = q<HTMLButtonElement>('.cx-orig');
-  const note = q<HTMLElement>('.cx-note');
   const issuesBox = q<HTMLElement>('.cx-issues');
   const exportBtn = q<HTMLButtonElement>('.cx-export');
 
@@ -78,8 +75,6 @@ export function createConsoleExportDialog(): { open(doc: PixelDocument): void } 
     adjustBox.hidden = plan.adjusted === 0;
     adjustText.textContent = `⚠ ${plan.adjusted} ${plan.adjusted === 1 ? 'Farbe' : 'Farben'} angepasst`;
     if (plan.adjusted === 0) showOriginal = false;
-    note.hidden = isPico || !PICOTRON_IS_PLACEHOLDER;
-    note.textContent = 'Hinweis: Die Picotron-Farbwerte sind noch vorläufig.';
     renderIssues();
     exportBtn.disabled = plan.blocked || plan.sprites.length === 0;
     draw();

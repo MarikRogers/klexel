@@ -6,7 +6,7 @@ import { PICOTRON } from '../../palette/picotron';
 describe('Paletten', () => {
   it('haben die richtige Größe', () => {
     expect(PICO8.length).toBe(16);
-    expect(PICOTRON.length).toBe(64);
+    expect(PICOTRON.length).toBe(32);
     expect(TARGET_PALETTE.pico8).toBe(PICO8);
     expect(TARGET_PALETTE.picotron).toBe(PICOTRON);
   });

@@ -33,10 +33,10 @@ export function writePicotron(plan: ExportPlan, cell: number, now: Date = new Da
   return `--[[pod_format="raw",created="${t}",modified="${t}",revision=1]]{${entries.join(',')}}`;
 }
 
-/** Nur für die manuelle Palettenprüfung (Task 6): Sprite k (1..63) einfarbig in Palettenindex k. */
+/** Nur für die manuelle Palettenprüfung (Task 6): Sprite k (1..31) einfarbig in Palettenindex k. */
 export function picotronPaletteTest(): ExportPlan {
   const sprites: PlanSprite[] = [];
-  for (let k = 1; k <= 63; k++) {
+  for (let k = 1; k <= 31; k++) {
     sprites.push({
       index: k, w: 16, h: 16,
       indices: new Uint8Array(256).fill(k), mapped: new Uint32Array(256), original: new Uint32Array(256),
