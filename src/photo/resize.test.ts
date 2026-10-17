@@ -43,7 +43,7 @@ describe('boxResize', () => {
     expect(out[0]).toBe(0x191919ff); // (0+100+0+0)/4 = 25 je Kanal
   });
   it('transparente Pixel zählen nicht zum RGB, wohl zum Alpha', () => {
-    const src = img(2, 2, (x, y) => (y === 0 ? 0 : RED));
+    const src = img(2, 2, (_x, y) => (y === 0 ? 0 : RED));
     const out = boxResize(src, { x: 0, y: 0, w: 2, h: 2 }, 1, 1);
     expect(out[0]).toBe(0xff000080); // Alpha 510/4 = 127.5 → 128
   });
