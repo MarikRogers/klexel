@@ -12,6 +12,17 @@ describe('Paletten', () => {
   });
 });
 
+describe('Picotron-Palette: Indexreihenfolge wie im Sprite-Blatt von Picotron', () => {
+  it('Indizes 0–15 entsprechen der PICO-8-Palette', () => {
+    expect(PICOTRON.slice(0, 16)).toEqual(PICO8);
+  });
+  it('Stichproben 16 und 31 (laut Screenshot des Sprite-Blatts)', () => {
+    expect(PICOTRON[16]).toBe(0x2463b0ff);
+    expect(PICOTRON[24]).toBe(0xb9003eff);
+    expect(PICOTRON[31]).toBe(0xf49671ff);
+  });
+});
+
 describe('reducePixels', () => {
   it('exakte Palettenfarbe bleibt unverändert', () => {
     const r = reducePixels(Uint32Array.of(PICO8[8]), PICO8);
