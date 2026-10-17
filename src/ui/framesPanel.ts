@@ -7,6 +7,7 @@ import { renderSheet, frameFiles, sheetLayout, sheetTooLarge, type SheetMode } f
 import { buildZip } from '../export/zip';
 import { saveBlob } from '../export/saveBlob';
 import { showToast } from './toast';
+import { createConsoleExportDialog } from './consoleExportDialog';
 
 export interface FramesPanelDeps {
   getDoc(): PixelDocument;
@@ -64,6 +65,9 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
           <button class="fx-sheet">Spritesheet (PNG)</button>
           <button class="fx-zip">Einzelbilder (ZIP)</button>
         </div>
+        <div class="fx-row">
+          <button class="fx-console">PICO-8 / Picotron …</button>
+        </div>
       </div>
     </div>`;
   document.getElementById('app')!.appendChild(el);
@@ -87,6 +91,8 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
   const scaleSel = q<HTMLSelectElement>('.fx-scale');
   const sheetBtn = q<HTMLButtonElement>('.fx-sheet');
   const zipBtn = q<HTMLButtonElement>('.fx-zip');
+  const consoleBtn = q<HTMLButtonElement>('.fx-console');
+  const consoleDlg = createConsoleExportDialog();
   let playing = false;
   let playRaf = 0;
   let playIndex = 0;
@@ -200,6 +206,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     if (sheetTooLarge(sheetLayout(d.frames.length, d.width, d.height, mode, cols), scale)) { showToast('Spritesheet zu groß'); return; }
     await saveBlob(await renderSheet(d, mode, cols, scale), 'spritesheet.png', 'image/png');
   });
+  consoleBtn.onclick = () => { deps.discardStroke(); deps.onChange(); consoleDlg.open(doc()); };
   zipBtn.onclick = () => exportWith(async () => {
     const files = await frameFiles(doc(), Number(scaleSel.value));
     await saveBlob(new Blob([buildZip(files) as BlobPart], { type: 'application/zip' }), 'frames.zip', 'application/zip');
