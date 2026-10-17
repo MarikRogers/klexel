@@ -174,3 +174,21 @@ dialog input[type=number] { width:5em; font-size:18px; }
 .cx-issue-actions button.active { border-color:var(--accent); }
 .cx-actions { display:flex; gap:8px; margin-top:10px; }
 .cx-actions button { flex:1 1 0; }
+
+/* Dialog "Foto zu Pixelart" */
+#photoDlg { width:min(94vw, 440px); padding:0; }
+#photoDlg::backdrop { background:rgba(0,0,0,.6); }
+#photoDlg .ph { padding:14px 16px; max-height:calc(100dvh - 40px); overflow-y:auto; }
+#photoDlg h2 { margin:0 0 6px; font-size:20px; }
+#photoDlg select, #photoDlg input { min-height:40px; font-size:16px; }
+.ph-sizes { display:flex; flex-direction:column; gap:4px; }
+.ph-wh { display:flex; gap:12px; flex-wrap:wrap; }
+.ph-presets { display:flex; gap:6px; }
+.ph-presets button { flex:1 1 0; min-height:40px; }
+.ph-preview { display:block; width:100%; max-height:50vh; object-fit:contain; image-rendering:pixelated; border-radius:6px; margin:8px 0; background:repeating-conic-gradient(#2a2a33 0% 25%, #1c1c23 0% 50%) 0 0 / 16px 16px; }
+.ph-hint { margin:4px 0; font-size:13px; color:#ffa300; }
+.ph-row { margin:4px 0; }
+.ph-row button, .ph-actions button { min-height:44px; padding:0 14px; }
+.ph-orig { touch-action:none; user-select:none; -webkit-user-select:none; }
+.ph-actions { display:flex; gap:8px; margin-top:10px; }
+.ph-actions button { flex:1 1 0; }
