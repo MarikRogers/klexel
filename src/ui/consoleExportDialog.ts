@@ -180,7 +180,7 @@ export function createConsoleExportDialog(): { open(doc: PixelDocument): void } 
       if (targetSel.value === 'pico8') {
         await saveBlob(new Blob([writePico8(plan)], { type: 'text/plain' }), 'klexel.p8', 'text/plain');
       } else {
-        await saveBlob(new Blob([writePicotron(plan, Number(cellSel.value))], { type: 'text/plain' }), '0.gfx', 'text/plain');
+        await saveBlob(new Blob([writePicotron(plan, Number(cellSel.value)) as BlobPart], { type: 'application/octet-stream' }), '0.gfx', 'application/octet-stream');
       }
     } catch (err) {
       console.error(err);
