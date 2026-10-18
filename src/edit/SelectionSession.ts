@@ -2,10 +2,16 @@ import { PixelDocument, blendOver } from '../model/Document';
 import { History } from '../model/History';
 import { Selection, SelectionMode } from '../model/Selection';
 import { flipFloating, rotateFloating90 } from './transform';
+import { scaleFloating } from './scale';
+import type { Box } from './resizeBox';
 
 export interface Floating { pixels: Uint32Array; mask: Uint8Array; w: number; h: number; x: number; y: number }
 export interface Clip { pixels: Uint32Array; mask: Uint8Array; w: number; h: number }
 export type LiftResult = 'ok' | 'locked' | 'hidden' | 'none';
+
+function copyFloating(f: Floating): Floating {
+  return { ...f, pixels: f.pixels.slice(), mask: f.mask.slice() };
+}
 
 export function undoAction(session: SelectionSession): 'cancel' | 'undo' {
   return session.isFloating ? 'cancel' : 'undo';
@@ -137,6 +143,30 @@ export class SelectionSession {
 
   rotate90(): LiftResult {
     return this.transform(rotateFloating90);
+  }
+
+  /** Beginn einer Größenänderung: hebt bei Bedarf an und liefert eine Kopie der schwebenden Auswahl als Ausgangszustand. */
+  beginScale(): { reason: LiftResult; base: Floating | null } {
+    const g = this.guard();
+    if (g !== 'ok') return { reason: g, base: null };
+    const r = this.lift();
+    if (r !== 'ok' || !this.float) return { reason: r, base: null };
+    return { reason: 'ok', base: copyFloating(this.float) };
+  }
+
+  /** Ersetzt die schwebende Auswahl durch `base`, skaliert auf `box` (immer aus dem Ausgangszustand, nie kumulativ). */
+  scaleTo(base: Floating, box: Box): void {
+    if (!this.float) return;
+    const s = scaleFloating(base, box.w, box.h);
+    this.float = { pixels: s.pixels, mask: s.mask, w: box.w, h: box.h, x: box.x, y: box.y };
+    this.placed = null;
+  }
+
+  /** Stellt den Ausgangszustand einer abgebrochenen Größenänderung wieder her. */
+  restoreScale(base: Floating): void {
+    if (!this.float) return;
+    this.float = copyFloating(base);
+    this.placed = null;
   }
 
   copy(): boolean {
