@@ -213,6 +213,6 @@ dialog input[type=number] { width:5em; font-size:18px; }
   #precbar button { min-height:40px; width:100%; padding:0 4px; font-size:13px; }
 }
 
-/* Lupe des Präzisionscursors: oben links in der Zeichenfläche, bei Bedarf rechts */
-.loupe { position:absolute; top:56px; left:10px; width:108px; height:108px; z-index:1; border:2px solid var(--accent); border-radius:10px; background:#000; pointer-events:none; image-rendering:pixelated; box-sizing:content-box; }
-.loupe.right { left:auto; right:10px; }
+/* Lupe des Präzisionscursors: oben links in der Zeichenfläche, bei Bedarf rechts (mit #stage canvas überschreiben) */
+#stage canvas.loupe { position:absolute; inset:auto; top:56px; left:10px; width:108px; height:108px; z-index:1; border:2px solid var(--accent); border-radius:10px; background:#000; pointer-events:none; box-sizing:content-box; }
+#stage canvas.loupe.right { left:auto; right:10px; }
