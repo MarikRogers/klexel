@@ -34,10 +34,13 @@ export class FreehandStroke {
     this.last = [x, y];
   }
 
-  end(commit: boolean): void {
-    if (!this.open) return;
+  /** Beendet den Strich; true, wenn dabei ein Undo-Schritt entstanden ist. */
+  end(commit: boolean): boolean {
+    if (!this.open) return false;
     this.open = false; this.last = null;
     const h = this.getHistory();
-    if (commit) h.commit(); else h.cancel();
+    if (commit) return h.commit();
+    h.cancel();
+    return false;
   }
 }

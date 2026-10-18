@@ -306,3 +306,13 @@ describe('History: unset und dropLast', () => {
     expect(h.dropLast()).toBe(false);
   });
 });
+
+describe('History: commit meldet, ob ein Schritt entstand', () => {
+  it('commit returns true with changes and false without', () => {
+    const { h } = setup();
+    h.begin(); h.set(0, 0, 3);
+    expect(h.commit()).toBe(true);
+    h.begin(); h.set(0, 0, 3); // gleicher Wert: keine Änderung
+    expect(h.commit()).toBe(false);
+  });
+});

@@ -11,8 +11,10 @@ export interface Effects {
   blocked(): boolean;
   strokeBegin(): void;
   strokePoint(x: number, y: number): void;
-  strokeEnd(commit: boolean): void;
-  fill(x: number, y: number): void;
+  /** true, wenn dabei ein Undo-Schritt entstanden ist */
+  strokeEnd(commit: boolean): boolean;
+  /** true, wenn die Füllung etwas verändert hat (ein Undo-Schritt entstanden ist) */
+  fill(x: number, y: number): boolean;
   pick(x: number, y: number): void;
   shapePreview(a: Pt, b: Pt): void;
   shapeCommit(): void;
@@ -147,13 +149,13 @@ export class PrecisionSession {
     if (isFreehand(this.tool)) {
       if (!this.stroking) return;
       if (!this.dragged) this.fx.strokePoint(x, y); // Tipp oder langes Halten: ein Pixel am Cursor
-      this.fx.strokeEnd(true);
+      const pushed = this.fx.strokeEnd(true);
       this.stroking = false;
-      if (isTap) this.undoTap = () => this.fx.dropLast();
+      if (isTap && pushed) this.undoTap = () => this.fx.dropLast();
     } else if (this.tool === 'fill') {
       if (this.fx.blocked()) return;
-      this.fx.fill(x, y);
-      if (isTap) this.undoTap = () => this.fx.dropLast();
+      const pushed = this.fx.fill(x, y);
+      if (isTap && pushed) this.undoTap = () => this.fx.dropLast();
     } else if (this.tool === 'picker') {
       const prev = this.fx.getColor();
       this.fx.pick(x, y);

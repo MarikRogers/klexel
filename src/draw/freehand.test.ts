@@ -84,6 +84,16 @@ describe('FreehandStroke', () => {
     expect(count()).toBe(5);
   });
 
+  it('end reports whether an undo step was created', () => {
+    const { stroke } = setup(true);
+    stroke.begin(); stroke.point(1, 1, 9);
+    expect(stroke.end(true)).toBe(true);
+    stroke.begin(); stroke.point(1, 1, 9); // gleicher Wert wie schon gesetzt
+    expect(stroke.end(true)).toBe(false);
+    stroke.begin(); stroke.point(2, 2, 9);
+    expect(stroke.end(false)).toBe(false);
+  });
+
   it('active reflects an open stroke', () => {
     const { stroke } = setup(true);
     expect(stroke.active).toBe(false);

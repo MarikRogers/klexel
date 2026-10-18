@@ -67,13 +67,15 @@ export class History {
     return true;
   }
 
-  commit(): void {
+  /** Schließt den Strich ab; true, wenn ein Undo-Schritt entstanden ist (nicht bei leerem Strich). */
+  commit(): boolean {
     const changes = this.current ? [...this.current.values()] : [];
     const layerId = this.currentLayerId;
     const frameId = this.currentFrameId;
     this.current = null;
-    if (changes.length === 0) return;
+    if (changes.length === 0) return false;
     this.push({ kind: 'pixels', layerId, frameId, changes });
+    return true;
   }
 
   /** Verwirft den laufenden Strich und stellt die Pixel wieder her. */

@@ -5,12 +5,13 @@ import type { Pt } from '../draw/pixelPerfect';
 class Fake implements Effects {
   log: string[] = [];
   isBlocked = false;
+  noChange = false;
   color = 7;
   blocked() { this.log.push('blocked?'); return this.isBlocked; }
   strokeBegin() { this.log.push('begin'); }
   strokePoint(x: number, y: number) { this.log.push(`point:${x},${y}`); }
-  strokeEnd(commit: boolean) { this.log.push(`end:${commit}`); }
-  fill(x: number, y: number) { this.log.push(`fill:${x},${y}`); }
+  strokeEnd(commit: boolean) { this.log.push(`end:${commit}`); return commit && !this.noChange; }
+  fill(x: number, y: number) { this.log.push(`fill:${x},${y}`); return !this.noChange; }
   pick(x: number, y: number) { this.log.push(`pick:${x},${y}`); this.color = 99; }
   shapePreview(a: Pt, b: Pt) { this.log.push(`preview:${a}>${b}`); }
   shapeCommit() { this.log.push('commit'); }
@@ -134,6 +135,23 @@ describe('PrecisionSession: Stift im Modus Zeichnen', () => {
     s.setMode('draw');
     s.setTool('eraser');
     expect(s.mode).toBe('draw');
+  });
+});
+
+describe('PrecisionSession: Tipp ohne Änderung', () => {
+  it('a tap that changed nothing is not dropped by a double tap (no unrelated undo step is lost)', () => {
+    const { fx, s } = make('pen');
+    s.setMode('draw'); fx.noChange = true; fx.log.length = 0;
+    tap(s, 35, 45, 0); tap(s, 35, 45, 150);
+    expect(fx.calls.filter(l => l === 'dropLast').length).toBe(0);
+    expect(s.mode).toBe('move');
+  });
+
+  it('a fill that changed nothing is not dropped by a double tap', () => {
+    const { fx, s } = make('fill');
+    s.setMode('draw'); fx.noChange = true; fx.log.length = 0;
+    tap(s, 35, 35, 0); tap(s, 35, 35, 150);
+    expect(fx.calls.filter(l => l === 'dropLast').length).toBe(0);
   });
 });
 
