@@ -132,6 +132,9 @@ export class Viewport {
   private drawScaleHandles(ctx: CanvasRenderingContext2D): void {
     for (const h of this.scaleHandles ?? []) {
       if (h.zone.w <= 0 || h.zone.h <= 0) continue;
+      // Auf die Touchzone beschneiden: nie ins Auswahlrechteck hinein, auch am Rand der Fläche
+      ctx.save();
+      ctx.beginPath(); ctx.rect(h.zone.x, h.zone.y, h.zone.w, h.zone.h); ctx.clip();
       ctx.beginPath();
       if (h.kind === 'corner') ctx.arc(h.cx, h.cy, HANDLE_CORNER_PX / 2, 0, Math.PI * 2);
       else {
@@ -141,6 +144,7 @@ export class Viewport {
       }
       ctx.fillStyle = '#fff'; ctx.fill();
       ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
     }
     const l = this.scaleLabel;
     if (l) {

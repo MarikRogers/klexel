@@ -99,6 +99,7 @@ let wandAll = false;
 
 // Schwebende Auswahl absetzen (ein Undo-Schritt) und speichern
 function settleSelection(): void {
+  if (selGesture?.kind === 'scale') cancelSelGesture(); // laufendes Skalieren verwerfen, nicht absetzen
   if (!session.isFloating) return;
   session.commit(); scheduleSave();
 }
@@ -235,11 +236,15 @@ let selGesture:
   | { kind: 'move'; x: number; y: number }
   | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
   | { kind: 'lasso'; points: Array<[number, number]> }
-  | { kind: 'scale'; handle: HandleId; start: Box; base: Floating; sx: number; sy: number }
+  | { kind: 'scale'; handle: HandleId; start: Box; base: Floating | null; wasFloating: boolean; sx: number; sy: number }
   | null = null;
 
 function cancelSelGesture(): void {
-  if (selGesture?.kind === 'scale') session.restoreScale(selGesture.base);
+  const g = selGesture;
+  if (g?.kind === 'scale' && g.base) {
+    // War die Auswahl vorher nicht angehoben, wird auch das Anheben zurückgenommen
+    if (g.wasFloating) session.restoreScale(g.base); else session.cancel();
+  }
   selGesture = null; view.selectionPreview = null;
 }
 
@@ -269,13 +274,11 @@ function scaleLabel(): { x: number; y: number; text: string } | null {
   return { x: Math.min(Math.max(x, 40), r.width - 40), y: Math.min(y, r.height - 20), text: `${f.w}×${f.h}` };
 }
 
+/** Angehoben wird erst beim ersten Ziehen, das die Größe wirklich ändert (ein bloßes Antippen eines Griffs ändert nichts). */
 function beginScaleGesture(handle: HandleId, sx: number, sy: number): void {
-  const r = session.beginScale();
-  if (r.reason === 'locked' || r.reason === 'hidden') {
-    showToast(r.reason === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet'); return;
-  }
-  if (!r.base) return;
-  selGesture = { kind: 'scale', handle, start: { x: r.base.x, y: r.base.y, w: r.base.w, h: r.base.h }, base: r.base, sx, sy };
+  const start = selectionBox();
+  if (!start) return;
+  selGesture = { kind: 'scale', handle, start, base: null, wasFloating: session.isFloating, sx, sy };
 }
 
 function selectionDown(sx: number, sy: number, x: number, y: number): void {
@@ -289,7 +292,17 @@ function selectionDown(sx: number, sy: number, x: number, y: number): void {
 function selectionMove(sx: number, sy: number, x: number, y: number): void {
   let g = selGesture; if (!g) return;
   if (g.kind === 'scale') {
-    session.scaleTo(g.base, resizeBox(g.handle, g.start, (sx - g.sx) / view.zoom, (sy - g.sy) / view.zoom));
+    const box = resizeBox(g.handle, g.start, (sx - g.sx) / view.zoom, (sy - g.sy) / view.zoom);
+    if (!g.base) {
+      if (box.x === g.start.x && box.y === g.start.y && box.w === g.start.w && box.h === g.start.h) return;
+      const r = session.beginScale();
+      if (r.reason === 'locked' || r.reason === 'hidden') {
+        showToast(r.reason === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet'); selGesture = null; return;
+      }
+      if (!r.base) { selGesture = null; return; }
+      g.base = r.base;
+    }
+    session.scaleTo(g.base, box);
     return;
   }
   if (g.kind === 'pending') {
