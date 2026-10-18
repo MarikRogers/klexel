@@ -3,6 +3,7 @@ import { toCss } from '../palette/palettes';
 import { edgeRuns, whiteEdges } from './edgeRuns';
 import type { SelectionEdge } from '../model/Selection';
 import type { Floating } from '../edit/SelectionSession';
+import { HANDLE_CORNER_PX, HANDLE_BAR_LONG_PX, HANDLE_BAR_SHORT_PX, type HandleGeom } from '../edit/handles';
 
 export class Viewport {
   zoom = 8;       // Bildschirmpixel pro Dokumentpixel
@@ -13,6 +14,9 @@ export class Viewport {
   /** Nachbarframes als Onion Skin (nur Anzeige, nie exportiert) */
   onion: { prev: Uint32Array | null; next: Uint32Array | null } | null = null;
   selectionOverlay: { edges: SelectionEdge[]; floating: Floating | null } | null = null;
+  /** Griffe zum Skalieren der Auswahl und Größenanzeige (Bildschirmkoordinaten) */
+  scaleHandles: HandleGeom[] | null = null;
+  scaleLabel: { x: number; y: number; text: string } | null = null;
   /** Präzisionscursor (Dokumentzelle); draw = Modus Zeichnen */
   cursor: { x: number; y: number; draw: boolean } | null = null;
   selectionPreview:
@@ -120,7 +124,34 @@ export class Viewport {
     // Bewusst nach dem Raster: Rahmen und Vorschau bleiben unabgedunkelt lesbar
     this.drawOutline(ctx, x, y);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.strokeRect(x - .5, y - .5, W + 1, H + 1);
+    this.drawScaleHandles(ctx);
     this.drawCursor(ctx, x, y);
+  }
+
+  /** Griffe der Auswahl: runde Ecken, abgerundete Balken in der Kantenmitte, weiß mit schwarzer Kontur */
+  private drawScaleHandles(ctx: CanvasRenderingContext2D): void {
+    for (const h of this.scaleHandles ?? []) {
+      if (h.zone.w <= 0 || h.zone.h <= 0) continue;
+      ctx.beginPath();
+      if (h.kind === 'corner') ctx.arc(h.cx, h.cy, HANDLE_CORNER_PX / 2, 0, Math.PI * 2);
+      else {
+        const vertical = h.id === 'e' || h.id === 'w';
+        const w = vertical ? HANDLE_BAR_SHORT_PX : HANDLE_BAR_LONG_PX, hh = vertical ? HANDLE_BAR_LONG_PX : HANDLE_BAR_SHORT_PX;
+        ctx.roundRect(h.cx - w / 2, h.cy - hh / 2, w, hh, HANDLE_BAR_SHORT_PX / 2);
+      }
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+    }
+    const l = this.scaleLabel;
+    if (l) {
+      ctx.font = '600 14px system-ui, sans-serif';
+      const w = ctx.measureText(l.text).width + 20;
+      ctx.fillStyle = 'rgba(0,0,0,.85)';
+      ctx.beginPath(); ctx.roundRect(l.x - w / 2, l.y - 14, w, 28, 14); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(l.text, l.x, l.y);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
   }
 
   /** Fadenkreuz um die Cursorzelle: weiß mit schwarzer Kontur, im Modus Zeichnen rot getönt */

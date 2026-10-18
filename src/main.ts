@@ -25,9 +25,11 @@ import { createShareDialog } from './ui/shareDialog';
 import { createLinkOpenDialog } from './ui/linkOpenDialog';
 import { readShareLink } from './share/link';
 import { Selection } from './model/Selection';
-import { SelectionSession, undoAction } from './edit/SelectionSession';
+import { SelectionSession, undoAction, type Floating } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
 import { exceedsTapThreshold, appendPathPoint, classifyGesture } from './edit/gestures';
+import { handleLayout, hitHandle, type HandleGeom } from './edit/handles';
+import { resizeBox, type Box, type HandleId } from './edit/resizeBox';
 import { saveBlob } from './export/saveBlob';
 import { saveState, loadState, exportPng, importPng } from './storage/storage';
 
@@ -178,6 +180,8 @@ function attach(newDoc: PixelDocument): void {
 
 function refresh(): void {
   view.onion = onionFrames(doc);
+  view.scaleHandles = scaleHandles();
+  view.scaleLabel = scaleLabel();
   if (precisionActive()) {
     const [cx, cy] = precision.cursor;
     view.cursor = { x: cx, y: cy, draw: precision.mode === 'draw' };
@@ -231,19 +235,63 @@ let selGesture:
   | { kind: 'move'; x: number; y: number }
   | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
   | { kind: 'lasso'; points: Array<[number, number]> }
+  | { kind: 'scale'; handle: HandleId; start: Box; base: Floating; sx: number; sy: number }
   | null = null;
 
 function cancelSelGesture(): void {
+  if (selGesture?.kind === 'scale') session.restoreScale(selGesture.base);
   selGesture = null; view.selectionPreview = null;
 }
 
+// ---- Auswahl skalieren: Griffe um das Auswahlrechteck ----
+/** Rechteck der Auswahl in Dokumentpixeln (schwebend: das schwebende Rechteck) */
+function selectionBox(): Box | null {
+  const f = session.floating;
+  if (f) return { x: f.x, y: f.y, w: f.w, h: f.h };
+  return session.selection?.bounds() ?? null;
+}
+
+function scaleHandles(): HandleGeom[] | null {
+  const b = tool === 'select' && session.hasSelection ? selectionBox() : null;
+  if (!b) return null;
+  const r = canvas.getBoundingClientRect();
+  const rect = { x: view.panX + b.x * view.zoom, y: view.panY + b.y * view.zoom, w: b.w * view.zoom, h: b.h * view.zoom };
+  const touch = window.matchMedia('(orientation: landscape)').matches ? 40 : 44;
+  return handleLayout(rect, { width: r.width, height: r.height }, touch);
+}
+
+function scaleLabel(): { x: number; y: number; text: string } | null {
+  const f = session.floating;
+  if (selGesture?.kind !== 'scale' || !f) return null;
+  const r = canvas.getBoundingClientRect();
+  const x = view.panX + (f.x + f.w / 2) * view.zoom;
+  const y = view.panY + (f.y + f.h) * view.zoom + 64;
+  return { x: Math.min(Math.max(x, 40), r.width - 40), y: Math.min(y, r.height - 20), text: `${f.w}×${f.h}` };
+}
+
+function beginScaleGesture(handle: HandleId, sx: number, sy: number): void {
+  const r = session.beginScale();
+  if (r.reason === 'locked' || r.reason === 'hidden') {
+    showToast(r.reason === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet'); return;
+  }
+  if (!r.base) return;
+  selGesture = { kind: 'scale', handle, start: { x: r.base.x, y: r.base.y, w: r.base.w, h: r.base.h }, base: r.base, sx, sy };
+}
+
 function selectionDown(sx: number, sy: number, x: number, y: number): void {
+  const hs = scaleHandles();
+  const hit = hs ? hitHandle(hs, sx, sy) : null;
+  if (hit) { beginScaleGesture(hit, sx, sy); return; }
   selGesture = { kind: 'pending', sx, sy, x, y, inside: selMode === 'replace' && session.hitTest(x, y) };
   if (selShape === 'lasso' && !selGesture.inside) selGesture.path = [[x, y]];
 }
 
 function selectionMove(sx: number, sy: number, x: number, y: number): void {
   let g = selGesture; if (!g) return;
+  if (g.kind === 'scale') {
+    session.scaleTo(g.base, resizeBox(g.handle, g.start, (sx - g.sx) / view.zoom, (sy - g.sy) / view.zoom));
+    return;
+  }
   if (g.kind === 'pending') {
     if (g.path) appendPathPoint(g.path, x, y); // Lasso sammelt ab Pointerdown, zeigt aber erst über der Schwelle
     if (!exceedsTapThreshold(g.sx, g.sy, sx, sy)) return;
@@ -273,7 +321,7 @@ function selectionMove(sx: number, sy: number, x: number, y: number): void {
 
 function selectionUp(): void {
   const g = selGesture; selGesture = null; view.selectionPreview = null;
-  if (!g) return;
+  if (!g || g.kind === 'scale') return;
   if (g.kind === 'pending') {
     const k = classifyGesture(selShape, selMode, g.inside, false);
     if (k === 'wand') { wandSelect(session, doc, g.x, g.y, wandAll, selMode); scheduleSave(); }
