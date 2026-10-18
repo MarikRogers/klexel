@@ -316,3 +316,38 @@ describe('History: commit meldet, ob ein Schritt entstand', () => {
     expect(h.commit()).toBe(false);
   });
 });
+
+describe('History: dropLast stellt den Zustand vor dem Schritt wieder her', () => {
+  const px = (doc: PixelDocument, x: number, y: number) => doc.cel(doc.activeId, doc.currentFrameId)?.[y * doc.width + x] ?? 0;
+
+  it('dropLast brings the redo stack back', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2);
+    h.undo();                       // Redo enthält den zweiten Strich
+    stroke(h, 2, 0, 3);             // leert den Redo-Stapel
+    expect(h.dropLast()).toBe(true);
+    expect(px(doc, 2, 0)).toBe(0);
+    expect(h.canRedo).toBe(true);
+    h.redo();
+    expect(px(doc, 1, 0)).toBe(2);
+  });
+
+  it('dropLast brings back the step that fell off the history limit', () => {
+    const doc = new PixelDocument(4, 4);
+    const h = new History(doc, 2);
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2); stroke(h, 2, 0, 3); // erster Schritt fällt heraus
+    expect(h.dropLast()).toBe(true);
+    expect(h.undo()).toBe(true); expect(h.undo()).toBe(true);
+    expect(h.canUndo).toBe(false);
+    expect(px(doc, 0, 0)).toBe(0);  // beide ersten Striche waren noch rückgängig zu machen
+  });
+
+  it('dropLast after an undo returns false and keeps the older step', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2);
+    h.undo();
+    expect(h.dropLast()).toBe(false);
+    expect(px(doc, 0, 0)).toBe(1);
+    expect(h.canUndo).toBe(true);
+  });
+});

@@ -432,8 +432,8 @@ $('fillMode').onclick = e => {
 };
 $('undo').onclick = () => {
   if (undoAction(session) === 'cancel') { session.cancel(); refresh(); scheduleSave(); return; }
-  endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
-$('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+  precision.cancel(); endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+$('redo').onclick = () => { precision.cancel(); endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
 $('layersBtn').onclick = () => { framesPanel.close(); panel.toggle(); refresh(); };
 $('framesBtn').onclick = () => { panel.close(); framesPanel.toggle(); refresh(); };
 const syncPrecisionBtn = () => $('precision').classList.toggle('active', settings.on);

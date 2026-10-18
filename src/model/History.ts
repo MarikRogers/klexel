@@ -32,9 +32,13 @@ export class History {
 
   constructor(private doc: PixelDocument, private limit = 100) {}
 
+  /** Was der letzte push() verändert hat, damit dropLast() den Zustand davor wiederherstellen kann. */
+  private lastPush: { step: Step; redo: Step[]; evicted: Step | undefined } | null = null;
+
   private push(step: Step): void {
     this.undoStack.push(step);
-    if (this.undoStack.length > this.limit) this.undoStack.shift();
+    const evicted = this.undoStack.length > this.limit ? this.undoStack.shift() : undefined;
+    this.lastPush = { step, redo: this.redoStack, evicted };
     this.redoStack = [];
   }
 
@@ -101,12 +105,19 @@ export class History {
     return true;
   }
 
-  /** Macht den neuesten Undo-Schritt rückgängig und verwirft ihn (kein Redo). */
+  /**
+   * Nimmt den zuletzt hinzugefügten Undo-Schritt zurück, als wäre er nie entstanden: kein Redo-Eintrag,
+   * die zuvor mögliche Redo-Liste und ein herausgefallener ältester Schritt kommen zurück.
+   * false, wenn danach Undo/Redo lief oder der Schritt nicht mehr oben liegt.
+   */
   dropLast(): boolean {
-    if (this.current) return false;
-    const step = this.undoStack.pop();
-    if (!step) return false;
-    this.apply(step, 'undo');
+    const last = this.lastPush;
+    if (this.current || !last || this.undoStack[this.undoStack.length - 1] !== last.step) return false;
+    this.undoStack.pop();
+    this.apply(last.step, 'undo');
+    this.redoStack = last.redo;
+    if (last.evicted) this.undoStack.unshift(last.evicted);
+    this.lastPush = null;
     return true;
   }
 
@@ -119,6 +130,7 @@ export class History {
     if (this.current) return false;
     const step = this.undoStack.pop();
     if (!step) return false;
+    this.lastPush = null;
     this.apply(step, 'undo');
     this.redoStack.push(step);
     return true;
@@ -128,6 +140,7 @@ export class History {
     if (this.current) return false;
     const step = this.redoStack.pop();
     if (!step) return false;
+    this.lastPush = null;
     this.apply(step, 'redo');
     this.undoStack.push(step);
     return true;
