@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Prototyp 2 – Versatz + Doppeltipp</title>
+<style>
+:root{color-scheme:dark;--bg:#14161b;--panel:#1d2027;--line:#2c313b;--fg:#e8eaed;--acc:#ffb703}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;overflow:hidden;overscroll-behavior:none}
+body{display:flex;flex-direction:column;height:100dvh}
+header{padding:8px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit}
+button:active{background:#3a4150}
+.sw{display:flex;align-items:center;gap:8px}
+.sw input{display:none}
+.track{width:42px;height:24px;border-radius:12px;background:#444b58;position:relative;transition:.15s}
+.track::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s}
+.sw input:checked+.track{background:var(--acc)}
+.sw input:checked+.track::after{left:21px}
+body.off #hand{display:none}
+#mode{margin-left:auto;padding:8px 14px;border-radius:999px;background:#2a2f39;border:1px solid var(--line);font-weight:600;min-width:104px}
+#mode.draw{background:#8a2330;border-color:#e63946}
+#pal{display:flex;gap:6px;width:100%}
+#pal button{flex:1;height:34px;padding:0;border-radius:6px}
+#pal button.on{outline:3px solid var(--acc);outline-offset:1px}
+/* Der obere Rand gehört zur Touchfläche: So erreicht der Finger auch die oberste Pixelreihe. */
+#stage{flex:1;min-height:0;position:relative;display:grid;place-items:center;padding:92px 8px 8px}
+#cv{display:block;border:1px solid var(--line)}
+#loupe{position:absolute;top:10px;left:10px;width:108px;height:108px;border:2px solid var(--acc);border-radius:10px;pointer-events:none;background:#000}
+#toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:10px 16px;border-radius:999px;background:rgba(0,0,0,.8);border:1px solid var(--acc);opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+#hint{position:absolute;right:10px;top:10px;max-width:46%;font-size:12px;opacity:.6;text-align:right;pointer-events:none}
+body.off #loupe,body.off #mode,body.off #hint{display:none}
+body.off #stage{padding-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <label class="sw"><input type="checkbox" id="prec" checked><span class="track"></span>Präzisionscursor</label>
+  <button id="hand">Hand: rechts</button>
+  <button id="mode">Bewegen</button>
+  <button id="undo">↶ Rückgängig</button>
+  <button id="clear">Leeren</button>
+  <div id="pal"></div>
+</header>
+<div id="stage"><canvas id="cv"></canvas><canvas id="loupe"></canvas><div id="hint">Doppeltippen schaltet zwischen Bewegen und Zeichnen um</div><div id="toast"></div></div>
+<script>
+const N=32, OFF=84, OFFX=28, PAL=[null,'#111111','#ffffff','#e63946','#f4a261','#ffd60a','#2a9d8f','#4361ee','#9b5de5'];
+const $=s=>document.querySelector(s);
+const stage=$('#stage'),cv=$('#cv'),g=cv.getContext('2d'),lc=$('#loupe'),lg=lc.getContext('2d'),toast=$('#toast'),modeEl=$('#mode');
+let px=new Uint8Array(N*N),undo=[],color=1,cell=10,prec=true;
+let fx=16,fy=16,drawMode=false,down=null,lastTap=null,inStroke=false,lastPix=null,toastT;
+
+PAL.forEach((c,i)=>{const b=document.createElement('button');
+  b.style.background=c||'repeating-conic-gradient(#555 0 25%,#888 0 50%) 50%/12px 12px';
+  if(i===color)b.classList.add('on');
+  b.onclick=()=>{color=i;document.querySelectorAll('#pal button').forEach(x=>x.classList.remove('on'));b.classList.add('on')};
+  $('#pal').appendChild(b)});
+$('#undo').onclick=()=>{const s=undo.pop();if(s)px.set(s)};
+$('#clear').onclick=()=>{snapshot();px.fill(0)};
+$('#prec').onchange=e=>{prec=e.target.checked;document.body.classList.toggle('off',!prec);down=null;lastTap=null;layout()};
+
+function snapshot(){undo.push(px.slice());if(undo.length>100)undo.shift()}
+function setPix(x,y){if(x<0||y<0||x>=N||y>=N)return;px[y*N+x]=color}
+function line(x0,y0,x1,y1){const dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let e=dx+dy;
+  for(;;){setPix(x0,y0);if(x0===x1&&y0===y1)break;const e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}}
+const cl=v=>Math.min(N-1e-6,Math.max(0,v));
+const ipx=()=>[Math.floor(fx),Math.floor(fy)];
+function say(t){toast.textContent=t;toast.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>toast.classList.remove('show'),900)}
+modeEl.onclick=()=>setMode(!drawMode);
+function setMode(m){drawMode=m;modeEl.textContent=m?'Zeichnen':'Bewegen';modeEl.classList.toggle('draw',m);say(m?'Zeichenmodus AN':'Zeichenmodus AUS')}
+
+// Finger -> Rasterkoordinaten. Mit Präzisionscursor liegt der Cursor OFF Pixel über dem Finger.
+// Rechtshänder: Cursor liegt oben links vom Finger (die Hand kommt von rechts unten), Linkshänder: oben rechts.
+let hand='R';
+function pos(e){const r=cv.getBoundingClientRect(),o=prec?OFF:0,ox=prec?(hand==='R'?-OFFX:OFFX):0;
+  return [cl((e.clientX+ox-r.left)/cell),cl((e.clientY-o-r.top)/cell)]}
+$('#hand').onclick=e=>{hand=hand==='R'?'L':'R';e.target.textContent=hand==='R'?'Hand: rechts':'Hand: links';say(hand==='R'?'Rechtshänder: Cursor oben links':'Linkshänder: Cursor oben rechts')};
+
+stage.addEventListener('pointerdown',e=>{
+  if(down)return;stage.setPointerCapture(e.pointerId);
+  down={id:e.pointerId,t:performance.now(),x:e.clientX,y:e.clientY,moved:false};
+  [fx,fy]=pos(e);down.start=ipx();
+  if(!prec){snapshot();inStroke=true;const [x,y]=ipx();setPix(x,y);lastPix=[x,y]}
+  else if(drawMode){snapshot();inStroke=true}});
+
+stage.addEventListener('pointermove',e=>{
+  if(!down||e.pointerId!==down.id)return;
+  const old=ipx();[fx,fy]=pos(e);const [x,y]=ipx();
+  if(!prec){line(old[0],old[1],x,y);return}
+  if(!down.moved&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>8){
+    down.moved=true;if(drawMode)line(down.start[0],down.start[1],x,y);return}
+  if(down.moved&&drawMode)line(old[0],old[1],x,y)});
+
+function end(e,cancel){
+  if(!down||e.pointerId!==down.id)return;
+  const now=performance.now();
+  if(prec&&!cancel&&!down.moved&&now-down.t<300){
+    const dbl=lastTap&&now-lastTap.t<350&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<50;
+    if(dbl){
+      if(inStroke)undo.pop();             // Schnappschuss dieses Tipps verwerfen
+      if(lastTap.drew){const s=undo.pop();if(s)px.set(s)}  // Pixel des ersten Tipps zurücknehmen
+      setMode(!drawMode);lastTap=null;
+    }else{
+      let drew=false;
+      if(drawMode){const [x,y]=ipx();setPix(x,y);drew=true}
+      lastTap={t:now,x:e.clientX,y:e.clientY,drew};
+    }
+  }else{lastTap=null}
+  inStroke=false;down=null}
+stage.addEventListener('pointerup',e=>end(e,false));
+stage.addEventListener('pointercancel',e=>end(e,true));
+
+function drawCell(c,x,y,sz,ox,oy){
+  if(x<0||y<0||x>=N||y>=N){c.fillStyle='#0c0d10';c.fillRect(ox,oy,sz,sz);return}
+  c.fillStyle=((x+y)&1)?'#3a3f4a':'#2f343e';c.fillRect(ox,oy,sz,sz);
+  const v=px[y*N+x];if(v){c.fillStyle=PAL[v];c.fillRect(ox,oy,sz,sz)}}
+function layout(){const r=stage.getBoundingClientRect(),top=prec?92:8;
+  cell=Math.max(4,Math.floor(Math.min(r.width-16,r.height-top-8)/N));
+  const s=cell*N,d=devicePixelRatio||1;
+  cv.style.width=cv.style.height=s+'px';cv.width=cv.height=Math.round(s*d);
+  lc.width=lc.height=Math.round(108*d)}
+function render(){const d=cv.width/(cell*N);g.setTransform(d,0,0,d,0,0);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++)drawCell(g,x,y,cell,x*cell,y*cell);
+  if(!prec)return;
+  const [ix,iy]=ipx(),x=ix*cell,y=iy*cell,a=cell*2.2,w=Math.max(2,cell/7);
+  if(drawMode){g.fillStyle='rgba(230,57,70,.5)';g.fillRect(x,y,cell,cell)}
+  for(const [col,lw] of [['#000',w+2],['#fff',w]]){g.strokeStyle=drawMode&&col==='#fff'?'#ff6b76':col;g.lineWidth=lw;
+    g.strokeRect(x,y,cell,cell);g.beginPath();
+    g.moveTo(x-a,y+cell/2);g.lineTo(x-cell*.3,y+cell/2);g.moveTo(x+cell*1.3,y+cell/2);g.lineTo(x+cell+a,y+cell/2);
+    g.moveTo(x+cell/2,y-a);g.lineTo(x+cell/2,y-cell*.3);g.moveTo(x+cell/2,y+cell*1.3);g.lineTo(x+cell/2,y+cell+a);g.stroke()}
+  const dl=lc.width/108;lg.setTransform(dl,0,0,dl,0,0);
+  for(let j=-4;j<=4;j++)for(let i=-4;i<=4;i++)drawCell(lg,ix+i,iy+j,12,(i+4)*12,(j+4)*12);
+  lg.strokeStyle=drawMode?'#e63946':'#ffb703';lg.lineWidth=2;lg.strokeRect(4*12+1,4*12+1,10,10);
+  const sr=stage.getBoundingClientRect(),cr=cv.getBoundingClientRect();
+  const sx=cr.left-sr.left+x,sy=cr.top-sr.top+y,m=a+20;
+  const hit=sx<10+108+m&&sy<10+108+m;
+  lc.style.left=hit?'auto':'10px';lc.style.right=hit?'10px':'auto';
+  $('#hint').style.display=hit?'none':''}
+function tick(){render();requestAnimationFrame(tick)}
+addEventListener('resize',layout);layout();requestAnimationFrame(tick);
+</script>
+</body>
+</html>
