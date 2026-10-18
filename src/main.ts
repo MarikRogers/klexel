@@ -4,6 +4,9 @@ import { History } from './model/History';
 import { Viewport } from './render/Viewport';
 import { onionFrames } from './render/onion';
 import { linePoints } from './tools/line';
+import { FreehandStroke } from './draw/freehand';
+import { loadSettings, saveSettings, type PrecisionSettings } from './precision/settings';
+import { createPrecisionBar } from './ui/precisionBar';
 import { floodFill } from './tools/fill';
 import { rectPoints, ellipsePoints } from './tools/shapes';
 import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
@@ -74,9 +77,11 @@ app.innerHTML = `
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = app.querySelector('canvas')!;
 
+let settings: PrecisionSettings = loadSettings();
 let doc = new PixelDocument(32, 32);
 let history = new History(doc);
 let view = new Viewport(canvas, doc);
+const stroke = new FreehandStroke(() => history, () => settings.pixelPerfect);
 let palette: Color[] = [...PICO8];
 let color: Color = palette[8];
 let tool: ToolName = 'pen';
@@ -90,6 +95,12 @@ function settleSelection(): void {
   if (!session.isFloating) return;
   session.commit(); scheduleSave();
 }
+
+const precisionBar = createPrecisionBar({
+  getSettings: () => settings,
+  update: patch => { settings = { ...settings, ...patch }; saveSettings(settings); },
+  getTool: () => tool,
+});
 
 const panel = createLayersPanel({
   getDoc: () => doc,
@@ -141,6 +152,7 @@ function refresh(): void {
   panel.refresh();
   framesPanel.refresh();
   selectionBar.refresh();
+  precisionBar.refresh();
 }
 
 let saveTimer = 0;
@@ -163,7 +175,6 @@ function renderSwatches(): void {
 // ---- Eingabe: 1 Finger zeichnen, 2 Finger Pinch/Pan ----
 const pointers = new Map<number, { x: number; y: number }>();
 let drawing = false;
-let last: [number, number] | null = null;
 let gesture: { dist: number; cx: number; cy: number; zoom: number } | null = null;
 
 const local = (e: PointerEvent): [number, number] => {
@@ -271,17 +282,14 @@ function commitShape(): void {
 }
 
 function apply(x: number, y: number): void {
-  if (tool === 'pen' || tool === 'eraser') {
-    const pts = last ? linePoints(last[0], last[1], x, y) : [[x, y] as [number, number]];
-    for (const [px, py] of pts) history.set(px, py, paintColor());
-    last = [x, y];
-  }
+  if (tool === 'pen' || tool === 'eraser') stroke.point(x, y, paintColor());
 }
 
 function endStroke(commit: boolean): void {
   if (!drawing) return;
-  drawing = false; last = null;
-  if (commit) history.commit(); else history.cancel();
+  drawing = false;
+  if (stroke.active) stroke.end(commit);
+  else if (commit) history.commit(); else history.cancel();
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -308,7 +316,8 @@ canvas.addEventListener('pointerdown', e => {
   if (isShape(tool)) {
     shapeStart = shapeEnd = [x, y]; updateShapePreview(); refresh(); return;
   }
-  drawing = true; history.begin();
+  drawing = true;
+  if (tool === 'fill') history.begin(); else stroke.begin();
   if (tool === 'fill') { floodFill(doc, history, x, y, color); endStroke(true); scheduleSave(); }
   else apply(x, y);
   refresh();
