@@ -1,8 +1,12 @@
-import { encodeImage, decodeBody, toBase64Url, fromBase64Url, type DecodedImage } from './linkCodec';
+import { encodeImage, decodeBody, toBase64Url, fromBase64Url, MAX_SIDE, MAX_COLORS, type DecodedImage } from './linkCodec';
 
 export const LINK_OK_MAX = 2000;
 export const LINK_WARN_MAX = 4000;
 
+/** Längster Wert, den ein gültiger Link haben kann (die Absenderseite erzeugt höchstens LINK_WARN_MAX Zeichen). */
+const MAX_VALUE_LENGTH = 6000;
+/** Größter gültiger Body: w, h, n + 32 Farben + 64×64 Pixel mit 6 Bit (32 Farben + Transparenz). */
+const MAX_BODY = 3 + MAX_COLORS * 3 + Math.ceil((MAX_SIDE * MAX_SIDE * 6) / 8);
 const VERSION = 1;
 const FLAG_TRANSPARENT = 1;
 const FLAG_COMPRESSED = 2;
@@ -17,6 +21,24 @@ export type OpenResult = { ok: true; image: DecodedImage; colors: number } | { o
 async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
   return new Uint8Array(await new Response(out).arrayBuffer());
+}
+
+/** Entpackt höchstens `max` Bytes; mehr bedeutet "kein gültiger Link" (schützt vor Dekompressionsbomben). */
+async function inflateCapped(bytes: Uint8Array, max: number): Promise<Uint8Array | null> {
+  const reader = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > max) { await reader.cancel(); return null; }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
 }
 
 /** Baut den Link aus dem Bild; nimmt die Kompression nur, wenn der Wert dadurch kürzer wird. */
@@ -46,6 +68,7 @@ export async function createShareLink(img: DecodedImage, base: string): Promise<
 export async function readShareLink(hash: string): Promise<OpenResult | null> {
   const value = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get('i');
   if (value === null) return null;
+  if (value.length > MAX_VALUE_LENGTH) return { ok: false, error: 'corrupt' };
   const bytes = fromBase64Url(value);
   if (!bytes || bytes.length < 2) return { ok: false, error: 'corrupt' };
   if (bytes[0] > VERSION) return { ok: false, error: 'newer' };
@@ -55,7 +78,11 @@ export async function readShareLink(hash: string): Promise<OpenResult | null> {
   let body = bytes.subarray(2);
   if (flags & FLAG_COMPRESSED) {
     if (typeof DecompressionStream === 'undefined') return { ok: false, error: 'no-decompress' };
-    try { body = await pipe(body, new DecompressionStream('deflate-raw')); } catch { return { ok: false, error: 'corrupt' }; }
+    try {
+      const inflated = await inflateCapped(body, MAX_BODY);
+      if (!inflated) return { ok: false, error: 'corrupt' };
+      body = inflated;
+    } catch { return { ok: false, error: 'corrupt' }; }
   }
   const d = decodeBody(body, (flags & FLAG_TRANSPARENT) !== 0);
   return d.ok ? { ok: true, image: d.image, colors: d.colors } : { ok: false, error: 'corrupt' };

@@ -132,6 +132,36 @@ describe('readShareLink', () => {
     expect(r && r.ok).toBe(true);
   });
 
+  it('Dekompressionsbombe: entpackt wird nur bis zur größten gültigen Größe, Ergebnis corrupt', async () => {
+    const RealDS = DecompressionStream;
+    let produced = 0;
+    class Counting {
+      readable: ReadableStream<Uint8Array>;
+      writable: WritableStream<Uint8Array>;
+      constructor(format: CompressionFormat) {
+        const real = new RealDS(format);
+        this.writable = real.writable as WritableStream<Uint8Array>;
+        this.readable = (real.readable as ReadableStream<Uint8Array>).pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) { produced += chunk.length; controller.enqueue(chunk); },
+        }));
+      }
+    }
+    const zeros = new Uint8Array(2_000_000); // 2 MB Nullen komprimieren auf wenige KB
+    const cs = new Blob([zeros]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const packed = new Uint8Array(await new Response(cs).arrayBuffer());
+    const bytes = new Uint8Array(2 + packed.length);
+    bytes[0] = 1; bytes[1] = 2; bytes.set(packed, 2);
+    const hash = '#i=' + toBase64Url(bytes);
+    expect(hash.length).toBeLessThan(6000);
+    vi.stubGlobal('DecompressionStream', Counting);
+    expect(await readShareLink(hash)).toEqual({ ok: false, error: 'corrupt' });
+    expect(produced).toBeLessThan(500_000);
+  });
+
+  it('zu langer Wert: corrupt, ohne zu entpacken', async () => {
+    expect(await readShareLink('#i=' + 'A'.repeat(6001))).toEqual({ ok: false, error: 'corrupt' });
+  });
+
   it('kaputte Kompressionsdaten: corrupt', async () => {
     const flat = await createShareLink(img(64, 64, i => (i === 0 ? GREEN : RED)), BASE);
     if (!flat.ok) throw new Error('Testlink');
