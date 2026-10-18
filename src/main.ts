@@ -14,6 +14,9 @@ import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { createAboutDialog } from './ui/aboutDialog';
 import { createPhotoDialog } from './ui/photoDialog';
+import { createShareDialog } from './ui/shareDialog';
+import { createLinkOpenDialog } from './ui/linkOpenDialog';
+import { readShareLink } from './share/link';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
@@ -39,6 +42,7 @@ app.innerHTML = `
       <button id="new" title="Neu">＋</button>
       <button id="import" title="PNG laden">⤒</button>
       <button id="photo" title="Foto laden">🖼</button>
+      <button id="share" title="Link teilen">🔗</button>
       <button id="export" title="PNG speichern">⤓</button>
     </div>
   </div>
@@ -411,6 +415,11 @@ $<HTMLInputElement>('photoFile').onchange = async e => {
   input.value = '';
   if (f) await photoDlg.open(f);
 };
+// "Link teilen": das Bild als Link (Bild im Teil nach #) verschicken
+const shareDlg = createShareDialog({
+  getImage: () => ({ width: doc.width, height: doc.height, pixels: doc.compositeFrame(doc.currentFrameId).slice() }),
+});
+$('share').onclick = () => { settleSelection(); void shareDlg.open(); };
 $('import').onclick = () => { settleSelection(); $('file').click(); };
 $<HTMLInputElement>('file').onchange = async e => {
   const input = e.target as HTMLInputElement;
@@ -444,10 +453,29 @@ new ResizeObserver(() => refresh()).observe($('stage'));
 // ---- Start ----
 renderSwatches();
 view.fit(); refresh();
-void loadState().then(s => {
-  if (!s) return;
-  palette = s.palette; color = s.color; renderSwatches();
-  attach(s.doc);
-});
+// Link öffnen: das Bild steckt im Teil nach # (siehe share/link.ts). Der Dialog erscheint erst nach dem Laden des gespeicherten Standes.
+const LINK_ERRORS = {
+  corrupt: 'Der Link ist beschädigt oder unvollständig.',
+  newer: 'Dieser Link stammt von einer neueren Version von Klexel. Bitte Klexel aktualisieren.',
+  'no-decompress': 'Dein Browser kann diesen Link nicht lesen.',
+} as const;
+const clearHash = () => { if (location.hash) window.history.replaceState(null, '', location.pathname + location.search); };
+const linkDlg = createLinkOpenDialog({ getDoc: () => doc, onApply: d => { attach(d); scheduleSave(); }, onClose: clearHash });
+async function openLinkFromHash(): Promise<void> {
+  const r = await readShareLink(location.hash);
+  if (!r) return;
+  if (r.ok) { settleSelection(); linkDlg.open(r.image, r.colors); return; }
+  showToast(LINK_ERRORS[r.error], 4000);
+  clearHash();
+}
+window.addEventListener('hashchange', () => { if (!document.getElementById('linkDlg')?.hasAttribute('open')) void openLinkFromHash(); });
+void loadState()
+  .then(s => {
+    if (!s) return;
+    palette = s.palette; color = s.color; renderSwatches();
+    attach(s.doc);
+  })
+  .catch(err => console.error(err))
+  .then(openLinkFromHash);
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');

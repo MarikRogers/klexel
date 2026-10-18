@@ -192,3 +192,15 @@ dialog input[type=number] { width:5em; font-size:18px; }
 .ph-orig { touch-action:none; user-select:none; -webkit-user-select:none; }
 .ph-actions { display:flex; gap:8px; margin-top:10px; }
 .ph-actions button { flex:1 1 0; }
+
+/* Dialog "Link teilen" und "Link öffnen" */
+#shareDlg, #linkDlg { width:min(94vw, 420px); padding:0; }
+#shareDlg::backdrop, #linkDlg::backdrop { background:rgba(0,0,0,.6); }
+#shareDlg .sh, #linkDlg .sh { padding:14px 16px; max-height:calc(100dvh - 40px); overflow-y:auto; }
+#shareDlg h2, #linkDlg h2 { margin:0 0 6px; font-size:20px; }
+.sh-preview { display:block; width:100%; max-height:40vh; object-fit:contain; image-rendering:pixelated; border-radius:6px; margin:8px 0; background:repeating-conic-gradient(#2a2a33 0% 25%, #1c1c23 0% 50%) 0 0 / 16px 16px; }
+.sh-info { margin:2px 0; font-size:14px; opacity:.85; }
+.sh-status { margin:4px 0 8px; font-size:14px; }
+.sh-url { width:100%; box-sizing:border-box; min-height:40px; font-size:14px; margin-bottom:8px; }
+.sh-actions { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+.sh-actions button { min-height:44px; padding:0 14px; }
