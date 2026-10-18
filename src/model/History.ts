@@ -86,6 +86,28 @@ export class History {
     this.doc.touch(frameId);
   }
 
+  /** Setzt ein Pixel des laufenden Strichs auf den Wert vor dem Strich zurück und streicht es aus dem Schritt. */
+  unset(x: number, y: number): boolean {
+    if (!this.current || !this.doc.inBounds(x, y)) return false;
+    const i = y * this.doc.width + x;
+    const ch = this.current.get(i);
+    if (!ch) return false;
+    const cel = this.doc.cel(this.currentLayerId, this.currentFrameId);
+    if (cel) cel[i] = ch.before;
+    this.current.delete(i);
+    this.doc.touch(this.currentFrameId);
+    return true;
+  }
+
+  /** Macht den neuesten Undo-Schritt rückgängig und verwirft ihn (kein Redo). */
+  dropLast(): boolean {
+    if (this.current) return false;
+    const step = this.undoStack.pop();
+    if (!step) return false;
+    this.apply(step, 'undo');
+    return true;
+  }
+
   get strokeOpen(): boolean { return this.current !== null; }
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
