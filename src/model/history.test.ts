@@ -257,3 +257,97 @@ describe('History: offener Strich', () => {
     expect(doc.cel(doc.activeId, doc.currentFrameId)![0]).toBe(5);
   });
 });
+
+describe('History: unset und dropLast', () => {
+  const px = (doc: PixelDocument, x: number, y: number) => doc.cel(doc.activeId, doc.currentFrameId)?.[y * doc.width + x] ?? 0;
+
+  it('unset restores the value from before the stroke', () => {
+    const { doc, h } = setup();
+    stroke(h, 1, 1, 5);
+    h.begin(); h.set(1, 1, 9);
+    expect(h.unset(1, 1)).toBe(true);
+    expect(px(doc, 1, 1)).toBe(5);
+  });
+
+  it('unset after two writes returns to the original', () => {
+    const { doc, h } = setup();
+    h.begin(); h.set(2, 2, 7); h.set(2, 2, 8);
+    expect(h.unset(2, 2)).toBe(true);
+    expect(px(doc, 2, 2)).toBe(0);
+  });
+
+  it('unset without a recorded change returns false', () => {
+    const { h } = setup();
+    expect(h.unset(0, 0)).toBe(false); // kein Strich offen
+    h.begin();
+    expect(h.unset(0, 0)).toBe(false); // nichts aufgezeichnet
+  });
+
+  it('commit after unset of the only change adds no undo step', () => {
+    const { h } = setup();
+    h.begin(); h.set(1, 1, 3); h.unset(1, 1); h.commit();
+    expect(h.canUndo).toBe(false);
+  });
+
+  it('dropLast reverts and does not fill the redo stack', () => {
+    const { doc, h } = setup();
+    stroke(h, 3, 3, 4);
+    expect(h.dropLast()).toBe(true);
+    expect(px(doc, 3, 3)).toBe(0);
+    expect(h.canUndo).toBe(false);
+    expect(h.canRedo).toBe(false);
+  });
+
+  it('dropLast with an open stroke or empty stack returns false', () => {
+    const { h } = setup();
+    expect(h.dropLast()).toBe(false);
+    stroke(h, 0, 0, 1);
+    h.begin();
+    expect(h.dropLast()).toBe(false);
+  });
+});
+
+describe('History: commit meldet, ob ein Schritt entstand', () => {
+  it('commit returns true with changes and false without', () => {
+    const { h } = setup();
+    h.begin(); h.set(0, 0, 3);
+    expect(h.commit()).toBe(true);
+    h.begin(); h.set(0, 0, 3); // gleicher Wert: keine Änderung
+    expect(h.commit()).toBe(false);
+  });
+});
+
+describe('History: dropLast stellt den Zustand vor dem Schritt wieder her', () => {
+  const px = (doc: PixelDocument, x: number, y: number) => doc.cel(doc.activeId, doc.currentFrameId)?.[y * doc.width + x] ?? 0;
+
+  it('dropLast brings the redo stack back', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2);
+    h.undo();                       // Redo enthält den zweiten Strich
+    stroke(h, 2, 0, 3);             // leert den Redo-Stapel
+    expect(h.dropLast()).toBe(true);
+    expect(px(doc, 2, 0)).toBe(0);
+    expect(h.canRedo).toBe(true);
+    h.redo();
+    expect(px(doc, 1, 0)).toBe(2);
+  });
+
+  it('dropLast brings back the step that fell off the history limit', () => {
+    const doc = new PixelDocument(4, 4);
+    const h = new History(doc, 2);
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2); stroke(h, 2, 0, 3); // erster Schritt fällt heraus
+    expect(h.dropLast()).toBe(true);
+    expect(h.undo()).toBe(true); expect(h.undo()).toBe(true);
+    expect(h.canUndo).toBe(false);
+    expect(px(doc, 0, 0)).toBe(0);  // beide ersten Striche waren noch rückgängig zu machen
+  });
+
+  it('dropLast after an undo returns false and keeps the older step', () => {
+    const { doc, h } = setup();
+    stroke(h, 0, 0, 1); stroke(h, 1, 0, 2);
+    h.undo();
+    expect(h.dropLast()).toBe(false);
+    expect(px(doc, 0, 0)).toBe(1);
+    expect(h.canUndo).toBe(true);
+  });
+});

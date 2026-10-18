@@ -4,6 +4,13 @@ import { History } from './model/History';
 import { Viewport } from './render/Viewport';
 import { onionFrames } from './render/onion';
 import { linePoints } from './tools/line';
+import { FreehandStroke } from './draw/freehand';
+import { loadSettings, saveSettings, type PrecisionSettings } from './precision/settings';
+import { createPrecisionBar } from './ui/precisionBar';
+import { PrecisionSession } from './precision/PrecisionSession';
+import { fingerToCell } from './precision/cursorMap';
+import { loupeCells, loupeSide } from './precision/loupe';
+import { createLoupe } from './ui/loupeView';
 import { floodFill } from './tools/fill';
 import { rectPoints, ellipsePoints } from './tools/shapes';
 import { PICO8, toCss, toHex, fromHex } from './palette/palettes';
@@ -35,6 +42,7 @@ app.innerHTML = `
       <button id="undo" title="Rückgängig">↶</button>
       <button id="redo" title="Wiederholen">↷</button>
       <button id="grid" class="active" title="Raster">▦</button>
+      <button id="precision" title="Präzisionscursor">⌖</button>
       <button id="layersBtn" title="Ebenen">${ICON.layers}</button>
       <button id="framesBtn" title="Frames">${ICON.frames}</button>
     </div>
@@ -74,9 +82,11 @@ app.innerHTML = `
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = app.querySelector('canvas')!;
 
+let settings: PrecisionSettings = loadSettings();
 let doc = new PixelDocument(32, 32);
 let history = new History(doc);
 let view = new Viewport(canvas, doc);
+const stroke = new FreehandStroke(() => history, () => settings.pixelPerfect);
 let palette: Color[] = [...PICO8];
 let color: Color = palette[8];
 let tool: ToolName = 'pen';
@@ -90,6 +100,39 @@ function settleSelection(): void {
   if (!session.isFloating) return;
   session.commit(); scheduleSave();
 }
+
+// Präzisionscursor: Bedienlogik in PrecisionSession, die App liefert die Wirkungen
+const precision = new PrecisionSession({
+  blocked: () => {
+    const r = doc.drawBlockReason();
+    if (r) showToast(r === 'locked' ? 'Ebene gesperrt' : 'Ebene ausgeblendet');
+    return r !== null;
+  },
+  strokeBegin: () => { drawing = true; stroke.begin(); },
+  strokePoint: (x, y) => stroke.point(x, y, paintColor()),
+  strokeEnd: commit => { const pushed = endStroke(commit); if (commit) scheduleSave(); return pushed; },
+  fill: (x, y) => { history.begin(); floodFill(doc, history, x, y, color); const pushed = history.commit(); scheduleSave(); return pushed; },
+  pick: (x, y) => { const c = doc.getComposite(x, y); if (c) { color = c; renderSwatches(); } },
+  shapePreview: (a, b) => { shapeStart = a; shapeEnd = b; updateShapePreview(); },
+  shapeCommit: () => commitShape(),
+  shapeCancel: () => cancelShape(),
+  dropLast: () => { history.dropLast(); scheduleSave(); },
+  getColor: () => color,
+  setColor: c => { color = c; renderSwatches(); },
+  say: text => showToast(text),
+  changed: () => refresh(),
+}, (sx, sy) => fingerToCell(sx, sy, settings.hand, view, doc.width, doc.height));
+const precisionActive = () => settings.on && precision.active;
+const loupe = createLoupe($('stage'));
+
+const precisionBar = createPrecisionBar({
+  getSettings: () => settings,
+  update: patch => { settings = { ...settings, ...patch }; saveSettings(settings); },
+  getTool: () => tool,
+  isActive: precisionActive,
+  getMode: () => precision.mode,
+  setMode: m => precision.setMode(m),
+});
 
 const panel = createLayersPanel({
   getDoc: () => doc,
@@ -129,11 +172,23 @@ function attach(newDoc: PixelDocument): void {
   panel.invalidate();
   framesPanel.invalidate();
   doc = newDoc; history = new History(doc); view = new Viewport(canvas, doc);
+  precision.reset([Math.floor(doc.width / 2), Math.floor(doc.height / 2)]);
   view.fit(); refresh();
 }
 
 function refresh(): void {
   view.onion = onionFrames(doc);
+  if (precisionActive()) {
+    const [cx, cy] = precision.cursor;
+    view.cursor = { x: cx, y: cy, draw: precision.mode === 'draw' };
+    loupe.update(
+      loupeCells(doc.composite(), doc.width, doc.height, cx, cy),
+      precision.mode === 'draw',
+      loupeSide(view.panX + cx * view.zoom, view.panY + cy * view.zoom, view.zoom),
+    );
+  } else {
+    view.cursor = null; loupe.hide();
+  }
   view.selectionOverlay = session.selection ? { edges: session.selection.edges(), floating: session.floating } : null;
   view.render();
   $<HTMLButtonElement>('undo').disabled = !history.canUndo && !session.isFloating;
@@ -141,6 +196,7 @@ function refresh(): void {
   panel.refresh();
   framesPanel.refresh();
   selectionBar.refresh();
+  precisionBar.refresh();
 }
 
 let saveTimer = 0;
@@ -163,7 +219,6 @@ function renderSwatches(): void {
 // ---- Eingabe: 1 Finger zeichnen, 2 Finger Pinch/Pan ----
 const pointers = new Map<number, { x: number; y: number }>();
 let drawing = false;
-let last: [number, number] | null = null;
 let gesture: { dist: number; cx: number; cy: number; zoom: number } | null = null;
 
 const local = (e: PointerEvent): [number, number] => {
@@ -271,17 +326,16 @@ function commitShape(): void {
 }
 
 function apply(x: number, y: number): void {
-  if (tool === 'pen' || tool === 'eraser') {
-    const pts = last ? linePoints(last[0], last[1], x, y) : [[x, y] as [number, number]];
-    for (const [px, py] of pts) history.set(px, py, paintColor());
-    last = [x, y];
-  }
+  if (tool === 'pen' || tool === 'eraser') stroke.point(x, y, paintColor());
 }
 
-function endStroke(commit: boolean): void {
-  if (!drawing) return;
-  drawing = false; last = null;
-  if (commit) history.commit(); else history.cancel();
+function endStroke(commit: boolean): boolean {
+  if (!drawing) return false;
+  drawing = false;
+  if (stroke.active) return stroke.end(commit);
+  if (commit) return history.commit();
+  history.cancel();
+  return false;
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -290,12 +344,14 @@ canvas.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: cx, y: cy });
   if (pointers.size === 2) {
     endStroke(false); // zweiter Finger: laufenden Strich bzw. Form verwerfen
+    precision.cancel();
     cancelShape(); cancelSelGesture();
     const [a, b] = [...pointers.values()];
     gesture = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, zoom: view.zoom };
     refresh(); return;
   }
   if (pointers.size > 2) return;
+  if (precisionActive()) { precision.down(cx, cy, e.timeStamp); return; }
   const [x, y] = view.toDoc(cx, cy);
   if (tool === 'select') { selectionDown(cx, cy, x, y); refresh(); return; }
   if (tool === 'picker') {
@@ -308,7 +364,8 @@ canvas.addEventListener('pointerdown', e => {
   if (isShape(tool)) {
     shapeStart = shapeEnd = [x, y]; updateShapePreview(); refresh(); return;
   }
-  drawing = true; history.begin();
+  drawing = true;
+  if (tool === 'fill') history.begin(); else stroke.begin();
   if (tool === 'fill') { floodFill(doc, history, x, y, color); endStroke(true); scheduleSave(); }
   else apply(x, y);
   refresh();
@@ -327,6 +384,7 @@ canvas.addEventListener('pointermove', e => {
     gesture.cx = mx; gesture.cy = my; gesture.zoom = view.zoom; gesture.dist = dist;
     refresh(); return;
   }
+  if (precisionActive() && pointers.size === 1) { precision.move(cx, cy); return; }
   if (selGesture) { const [x, y] = view.toDoc(cx, cy); selectionMove(cx, cy, x, y); refresh(); return; }
   if (shapeStart) {
     shapeEnd = view.toDoc(cx, cy); updateShapePreview(); refresh(); return;
@@ -339,12 +397,13 @@ canvas.addEventListener('pointermove', e => {
 function release(e: PointerEvent): void {
   if (!pointers.delete(e.pointerId)) return;
   if (pointers.size < 2) gesture = null;
+  if (precisionActive()) { const [cx, cy] = local(e); precision.up(cx, cy, e.timeStamp); return; }
   if (selGesture) { selectionUp(); refresh(); return; }
   if (shapeStart) { commitShape(); refresh(); return; }
   if (drawing) { endStroke(true); scheduleSave(); refresh(); }
 }
 canvas.addEventListener('pointerup', release);
-canvas.addEventListener('pointercancel', e => { endStroke(false); cancelShape(); cancelSelGesture(); release(e); refresh(); });
+canvas.addEventListener('pointercancel', e => { precision.cancel(); endStroke(false); cancelShape(); cancelSelGesture(); release(e); refresh(); });
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   view.zoomAt(e.offsetX, e.offsetY, view.zoom + (e.deltaY < 0 ? 1 : -1)); refresh();
@@ -359,6 +418,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => {
     if (tool === 'select' && next !== 'select') { session.deselect(); cancelSelGesture(); }
     endStroke(false); cancelShape();
     tool = b.dataset.tool as ToolName;
+    precision.setTool(tool);
     document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
     $('fillMode').hidden = !(tool === 'rect' || tool === 'ellipse');
     selectionBar.setVisible(tool === 'select');
@@ -372,10 +432,16 @@ $('fillMode').onclick = e => {
 };
 $('undo').onclick = () => {
   if (undoAction(session) === 'cancel') { session.cancel(); refresh(); scheduleSave(); return; }
-  endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
-$('redo').onclick = () => { endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+  precision.cancel(); endStroke(false); cancelShape(); history.commitProps(); history.undo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
+$('redo').onclick = () => { precision.cancel(); endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
 $('layersBtn').onclick = () => { framesPanel.close(); panel.toggle(); refresh(); };
 $('framesBtn').onclick = () => { panel.close(); framesPanel.toggle(); refresh(); };
+const syncPrecisionBtn = () => $('precision').classList.toggle('active', settings.on);
+$('precision').onclick = () => {
+  settings = { ...settings, on: !settings.on }; saveSettings(settings);
+  precision.reset(precision.cursor); // laufende Berührung verwerfen, Modus Bewegen, Cursor bleibt
+  syncPrecisionBtn(); refresh();
+};
 $('grid').onclick = e => { view.showGrid = !view.showGrid; (e.currentTarget as HTMLElement).classList.toggle('active', view.showGrid); refresh(); };
 $('custom').onclick = () => { const i = $<HTMLInputElement>('colorInput'); i.value = toHex(color); i.click(); };
 $<HTMLInputElement>('colorInput').onchange = e => {
@@ -452,6 +518,9 @@ new ResizeObserver(() => refresh()).observe($('stage'));
 
 // ---- Start ----
 renderSwatches();
+precision.setTool(tool);
+precision.reset([Math.floor(doc.width / 2), Math.floor(doc.height / 2)]);
+syncPrecisionBtn();
 view.fit(); refresh();
 // Link öffnen: das Bild steckt im Teil nach # (siehe share/link.ts). Der Dialog erscheint erst nach dem Laden des gespeicherten Standes.
 const LINK_ERRORS = {

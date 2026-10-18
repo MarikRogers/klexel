@@ -13,6 +13,8 @@ export class Viewport {
   /** Nachbarframes als Onion Skin (nur Anzeige, nie exportiert) */
   onion: { prev: Uint32Array | null; next: Uint32Array | null } | null = null;
   selectionOverlay: { edges: SelectionEdge[]; floating: Floating | null } | null = null;
+  /** Präzisionscursor (Dokumentzelle); draw = Modus Zeichnen */
+  cursor: { x: number; y: number; draw: boolean } | null = null;
   selectionPreview:
     | { kind: 'rect'; x0: number; y0: number; x1: number; y1: number }
     | { kind: 'path'; points: Array<[number, number]> }
@@ -118,6 +120,25 @@ export class Viewport {
     // Bewusst nach dem Raster: Rahmen und Vorschau bleiben unabgedunkelt lesbar
     this.drawOutline(ctx, x, y);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.strokeRect(x - .5, y - .5, W + 1, H + 1);
+    this.drawCursor(ctx, x, y);
+  }
+
+  /** Fadenkreuz um die Cursorzelle: weiß mit schwarzer Kontur, im Modus Zeichnen rot getönt */
+  private drawCursor(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const c = this.cursor;
+    if (!c) return;
+    const z = this.zoom, cx = x + c.x * z, cy = y + c.y * z, arm = z * 2.2, w = Math.max(2, z / 7);
+    if (c.draw) { ctx.fillStyle = 'rgba(230,57,70,.5)'; ctx.fillRect(cx, cy, z, z); }
+    for (const [col, lw] of [['#000', w + 2], [c.draw ? '#ff6b76' : '#fff', w]] as const) {
+      ctx.strokeStyle = col; ctx.lineWidth = lw;
+      ctx.strokeRect(cx, cy, z, z);
+      ctx.beginPath();
+      ctx.moveTo(cx - arm, cy + z / 2); ctx.lineTo(cx - z * .3, cy + z / 2);
+      ctx.moveTo(cx + z * 1.3, cy + z / 2); ctx.lineTo(cx + z + arm, cy + z / 2);
+      ctx.moveTo(cx + z / 2, cy - arm); ctx.lineTo(cx + z / 2, cy - z * .3);
+      ctx.moveTo(cx + z / 2, cy + z * 1.3); ctx.lineTo(cx + z / 2, cy + z + arm);
+      ctx.stroke();
+    }
   }
 
   /** Schwebende Pixel (nur aus dem Cache neu gebaut, wenn sie sich ändern) */

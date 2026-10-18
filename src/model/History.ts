@@ -32,9 +32,13 @@ export class History {
 
   constructor(private doc: PixelDocument, private limit = 100) {}
 
+  /** Was der letzte push() verändert hat, damit dropLast() den Zustand davor wiederherstellen kann. */
+  private lastPush: { step: Step; redo: Step[]; evicted: Step | undefined } | null = null;
+
   private push(step: Step): void {
     this.undoStack.push(step);
-    if (this.undoStack.length > this.limit) this.undoStack.shift();
+    const evicted = this.undoStack.length > this.limit ? this.undoStack.shift() : undefined;
+    this.lastPush = { step, redo: this.redoStack, evicted };
     this.redoStack = [];
   }
 
@@ -67,13 +71,15 @@ export class History {
     return true;
   }
 
-  commit(): void {
+  /** Schließt den Strich ab; true, wenn ein Undo-Schritt entstanden ist (nicht bei leerem Strich). */
+  commit(): boolean {
     const changes = this.current ? [...this.current.values()] : [];
     const layerId = this.currentLayerId;
     const frameId = this.currentFrameId;
     this.current = null;
-    if (changes.length === 0) return;
+    if (changes.length === 0) return false;
     this.push({ kind: 'pixels', layerId, frameId, changes });
+    return true;
   }
 
   /** Verwirft den laufenden Strich und stellt die Pixel wieder her. */
@@ -86,6 +92,35 @@ export class History {
     this.doc.touch(frameId);
   }
 
+  /** Setzt ein Pixel des laufenden Strichs auf den Wert vor dem Strich zurück und streicht es aus dem Schritt. */
+  unset(x: number, y: number): boolean {
+    if (!this.current || !this.doc.inBounds(x, y)) return false;
+    const i = y * this.doc.width + x;
+    const ch = this.current.get(i);
+    if (!ch) return false;
+    const cel = this.doc.cel(this.currentLayerId, this.currentFrameId);
+    if (cel) cel[i] = ch.before;
+    this.current.delete(i);
+    this.doc.touch(this.currentFrameId);
+    return true;
+  }
+
+  /**
+   * Nimmt den zuletzt hinzugefügten Undo-Schritt zurück, als wäre er nie entstanden: kein Redo-Eintrag,
+   * die zuvor mögliche Redo-Liste und ein herausgefallener ältester Schritt kommen zurück.
+   * false, wenn danach Undo/Redo lief oder der Schritt nicht mehr oben liegt.
+   */
+  dropLast(): boolean {
+    const last = this.lastPush;
+    if (this.current || !last || this.undoStack[this.undoStack.length - 1] !== last.step) return false;
+    this.undoStack.pop();
+    this.apply(last.step, 'undo');
+    this.redoStack = last.redo;
+    if (last.evicted) this.undoStack.unshift(last.evicted);
+    this.lastPush = null;
+    return true;
+  }
+
   get strokeOpen(): boolean { return this.current !== null; }
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
@@ -95,6 +130,7 @@ export class History {
     if (this.current) return false;
     const step = this.undoStack.pop();
     if (!step) return false;
+    this.lastPush = null;
     this.apply(step, 'undo');
     this.redoStack.push(step);
     return true;
@@ -104,6 +140,7 @@ export class History {
     if (this.current) return false;
     const step = this.redoStack.pop();
     if (!step) return false;
+    this.lastPush = null;
     this.apply(step, 'redo');
     this.undoStack.push(step);
     return true;

@@ -204,3 +204,15 @@ dialog input[type=number] { width:5em; font-size:18px; }
 .sh-url { width:100%; box-sizing:border-box; min-height:40px; font-size:14px; margin-bottom:8px; }
 .sh-actions { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
 .sh-actions button { min-height:44px; padding:0 14px; }
+
+/* Präzisionsleiste: Pixel-perfect, später Modus und Hand */
+#precbar { background:var(--panel); display:flex; flex-wrap:wrap; gap:6px; padding:4px 8px; justify-content:center; align-items:center; }
+#precbar button { font-size:14px; min-height:44px; padding:0 12px; }
+@media (orientation: landscape) {
+  #precbar { order:1; flex-direction:column; flex-wrap:nowrap; width:104px; padding:6px; overflow-y:auto; justify-content:flex-start; }
+  #precbar button { min-height:40px; width:100%; padding:0 4px; font-size:13px; }
+}
+
+/* Lupe des Präzisionscursors: oben links in der Zeichenfläche, bei Bedarf rechts (mit #stage canvas überschreiben) */
+#stage canvas.loupe { position:absolute; inset:auto; top:56px; left:10px; width:108px; height:108px; z-index:1; border:2px solid var(--accent); border-radius:10px; background:#000; pointer-events:none; box-sizing:content-box; }
+#stage canvas.loupe.right { left:auto; right:10px; }
