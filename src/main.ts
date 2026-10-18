@@ -14,6 +14,7 @@ import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
 import { createAboutDialog } from './ui/aboutDialog';
 import { createPhotoDialog } from './ui/photoDialog';
+import { createShareDialog } from './ui/shareDialog';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
@@ -39,6 +40,7 @@ app.innerHTML = `
       <button id="new" title="Neu">＋</button>
       <button id="import" title="PNG laden">⤒</button>
       <button id="photo" title="Foto laden">🖼</button>
+      <button id="share" title="Link teilen">🔗</button>
       <button id="export" title="PNG speichern">⤓</button>
     </div>
   </div>
@@ -411,6 +413,11 @@ $<HTMLInputElement>('photoFile').onchange = async e => {
   input.value = '';
   if (f) await photoDlg.open(f);
 };
+// "Link teilen": das Bild als Link (Bild im Teil nach #) verschicken
+const shareDlg = createShareDialog({
+  getImage: () => ({ width: doc.width, height: doc.height, pixels: doc.compositeFrame(doc.currentFrameId).slice() }),
+});
+$('share').onclick = () => { settleSelection(); void shareDlg.open(); };
 $('import').onclick = () => { settleSelection(); $('file').click(); };
 $<HTMLInputElement>('file').onchange = async e => {
   const input = e.target as HTMLInputElement;
