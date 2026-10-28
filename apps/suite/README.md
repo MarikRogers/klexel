@@ -16,8 +16,12 @@ npm run deploy -- --areas klexel                # bauen, prüfen, auf gh-pages v
 npm run deploy -- --areas klexel --dry-run      # nur bauen und prüfen, nichts veröffentlichen
 ```
 
+`npm run deploy` setzt die Auswahl immer ausdrücklich (`--areas`, sonst `VITE_AREAS` aus der Umgebung, sonst alle);
+ein `VITE_AREAS` aus `.env`-Dateien gilt dort nicht. Ein von npm geschlucktes `--dry-run` wird ebenfalls als Probelauf behandelt.
+
 Name, Titel und Manifest richten sich nach der Auswahl (nur Rigsprite → „RigSprite", sonst „Klexel"); der Cache-Name des
-Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v6`).
+Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v6`); der Service Worker liest nur aus dem
+eigenen Cache und löscht beim Aktivieren alle anderen `pixelart-*`-Caches (fremde Caches bleiben).
 
 **Stand:** Rigsprite ist noch nicht eingebunden. Bis dahin enthält auch der Standard-Build nur Klexel, und ein Build nur
 mit `rigsprite` bricht mit „Rigsprite ist noch nicht eingebunden" ab.

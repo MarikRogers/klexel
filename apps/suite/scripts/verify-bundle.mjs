@@ -5,14 +5,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-/** Art → Marker-Zeichenkette (null = Marker noch nicht festgelegt, Prüfung wird mit Warnung übersprungen). */
-const MARKERS = {
-  klexel: 'AREA_MARKER_KLEXEL',
-  rigsprite: null, // folgt mit der Einbindung von Rigsprite (Task 10)
-};
-/** Erwarteter App-Name im Manifest (wie appNameFor in src/areaNames.ts) */
-const appName = areas => (areas.length === 1 && areas[0] === 'rigsprite' ? 'RigSprite' : 'Klexel');
+import { MARKERS, appNameFor, cacheNameFor } from './bundleChecks.mjs';
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const expected = [...new Set(process.argv.slice(2).flatMap(a => a.split(',')).map(a => a.trim().toLowerCase()).filter(Boolean))];
@@ -54,14 +47,43 @@ for (const [kind, marker] of Object.entries(MARKERS)) {
   else console.log(`✓ ${kind}: ${want ? `enthalten (${hits.join(', ')})` : 'nicht enthalten'}`);
 }
 
+const read = file => (existsSync(join(dist, file)) ? readFileSync(join(dist, file), 'utf8') : null);
+// Bereiche ohne Marker sind im Bundle nicht nachweisbar: der Build kann sie zusätzlich enthalten (z. B. Standard-Build
+// „klexel,rigsprite", solange Rigsprite keinen Marker hat). Name und Cache-Name dürfen zu jeder dieser Varianten passen.
+const unmarked = Object.keys(MARKERS).filter(k => MARKERS[k] === null && !expected.includes(k));
+const variants = unmarked.reduce((acc, k) => acc.flatMap(v => [v, [...v, k]]), [expected]);
+const names = [...new Set(variants.map(appNameFor))];
+const caches = [...new Set(variants.map(cacheNameFor))];
+const name = names.join('" oder „');
+
 // Manifest-Name passend zur Auswahl
-const mfPath = join(dist, 'manifest.webmanifest');
-if (existsSync(mfPath)) {
-  const mf = JSON.parse(readFileSync(mfPath, 'utf8'));
-  const name = appName(expected);
-  if (mf.name !== name || mf.short_name !== name) fail(`Manifest heißt „${mf.name}"/„${mf.short_name}", erwartet „${name}"`);
-  else console.log(`✓ Manifest: ${name}`);
-} else fail('manifest.webmanifest fehlt');
+const mfText = read('manifest.webmanifest');
+if (mfText === null) fail('manifest.webmanifest fehlt');
+else {
+  const mf = JSON.parse(mfText);
+  if (!names.includes(mf.name) || mf.short_name !== mf.name) fail(`Manifest heißt „${mf.name}"/„${mf.short_name}", erwartet „${name}"`);
+  else console.log(`✓ Manifest: ${mf.name}`);
+}
+
+// Titel und Home-Bildschirm-Name in index.html
+const html = read('index.html');
+if (html === null) fail('index.html fehlt');
+else {
+  const title = html.match(/<title>([^<]*)<\/title>/)?.[1];
+  const apple = html.match(/<meta name="apple-mobile-web-app-title" content="([^"]*)"/)?.[1];
+  if (!names.includes(title) || apple !== title) fail(`index.html: Titel „${title}", apple-mobile-web-app-title „${apple}", erwartet „${name}"`);
+  else console.log(`✓ index.html: ${title}`);
+}
+
+// Cache-Name des Service Workers
+const sw = read('sw.js');
+if (sw === null) fail('sw.js fehlt');
+else {
+  const got = sw.match(/const CACHE = '([^']*)';/)?.[1];
+  if (!caches.includes(got)) fail(`sw.js: Cache „${got}", erwartet „${caches.join('" oder „')}"`);
+  else if (sw.includes('const BUILD_ASSETS = [];')) fail('sw.js: BUILD_ASSETS nicht eingesetzt');
+  else console.log(`✓ sw.js: Cache ${got}`);
+}
 
 if (process.exitCode) console.error('Bundle-Prüfung fehlgeschlagen');
 else console.log(`Bundle-Prüfung bestanden (${expected.join(', ')})`);

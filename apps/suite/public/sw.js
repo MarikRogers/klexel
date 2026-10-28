@@ -2,15 +2,19 @@
 // eigener Cache-Name je Auswahl, BUILD_ASSETS = alle gebauten Dateien inkl. nachgeladener Bereichs-Chunks.
 const CACHE = 'pixelart-v6';
 const BUILD_ASSETS = [];
-// Nur ältere Fassungen desselben Builds aufräumen, nie die Caches einer anderen Auslieferung auf derselben Adresse
-const CACHE_PREFIX = CACHE.replace(/\d+$/, '');
+// Alle Caches dieser App beginnen mit diesem Präfix. Beim Aktivieren werden alle anderen davon gelöscht (ältere
+// Fassungen und andere Bereichs-Auswahlen); Caches mit anderem Präfix bleiben unangetastet.
+const FAMILY = 'pixelart-';
 const STATIC = ['./', 'impressum.html', 'datenschutz.html', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
+
+// Nachschlagen nur im eigenen Cache: ein liegengebliebener alter Cache (z. B. mit veraltetem index) darf nie antworten.
+const ownCache = () => caches.open(CACHE);
 
 // Beim Installieren alles Nötige vorab laden, inkl. der gehashten JS/CSS-Dateien aus index.html,
 // damit die App schon nach dem ersten Besuch offline startet.
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
+    const cache = await ownCache();
     const html = await (await fetch('./', { cache: 'reload' })).text();
     const assets = [...html.matchAll(/(?:src|href)="(\.\/assets\/[^"]+)"/g)].map(m => m[1]);
     await cache.addAll([...new Set([...STATIC, ...assets, ...BUILD_ASSETS])]);
@@ -19,10 +23,11 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k.startsWith(CACHE_PREFIX)).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k.startsWith(FAMILY) && k !== CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
 // Seite: Netzwerk zuerst (Updates kommen an), offline aus dem Cache.
@@ -34,19 +39,25 @@ self.addEventListener('fetch', e => {
     const isApp = new URL(e.request.url).pathname === new URL('./', self.registration.scope).pathname;
     e.respondWith(
       fetch(e.request).then(res => {
-        if (res.ok && isApp) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./', copy)); }
+        if (res.ok && isApp) { const copy = res.clone(); ownCache().then(c => c.put('./', copy)); }
         return res;
-      }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./')))
+      }).catch(async () => {
+        const cache = await ownCache();
+        return (await cache.match(e.request)) || cache.match('./');
+      })
     );
     return;
   }
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+  e.respondWith((async () => {
+    const cache = await ownCache();
+    const hit = await cache.match(e.request);
+    if (hit) return hit;
+    return fetch(e.request).then(res => {
       if (res.ok && new URL(e.request.url).origin === location.origin) {
         const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
+        cache.put(e.request, copy);
       }
       return res;
-    }).catch(() => caches.match('./')))
-  );
+    }).catch(() => cache.match('./'));
+  })());
 });
