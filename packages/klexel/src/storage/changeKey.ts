@@ -1,4 +1,4 @@
-import type { SavedState } from '@suite/klexel';
+import type { SavedState } from './state';
 
 // Zwei unabhängige 32-Bit-Hashes (FNV-1a und ein multiplikativer) über alle Werte; zusammen 64 Bit
 function mix(h: [number, number], v: number): void {
@@ -10,7 +10,7 @@ function mix(h: [number, number], v: number): void {
  * Kurzer Schlüssel für einen Klexel-Stand: gleich bei gleichem Inhalt, verschieden bei jeder Änderung
  * (bis auf vernachlässigbare Kollisionen). Damit sichert die Hülle nur, wenn sich wirklich etwas geändert hat.
  */
-export function snapshotKey(s: SavedState): string {
+export function changeKey(s: SavedState): string {
   const h: [number, number] = [0x811c9dc5, 0x12345678];
   const { layers, ...rest } = s;
   const head = JSON.stringify({ ...rest, layers: layers.map(({ cels, ...l }) => ({ ...l, cels: Object.keys(cels) })) });

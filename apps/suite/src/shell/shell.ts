@@ -1,12 +1,12 @@
-// Hülle (nur Browser): Workspace öffnen, Bestand übernehmen, Klexel einhängen, Projekte wechseln und automatisch sichern.
+// Hülle (nur Browser): Workspace öffnen, Bestand übernehmen, den Bereich einhängen, Projekte wechseln und automatisch sichern.
+// Alles Bereichs-Spezifische (leere Projekte, Lesbarkeit, Änderungserkennung, Alt-Stand, Einhängen) kommt über die
+// Bereichs-Beschreibungen (AreaDescriptor); die Hülle importiert kein Bereichs-Paket.
 import './shell.css';
-import type { AreaHandle, AreaHost, NewProjectInit, ProjectMeta } from '@suite/shared';
+import type { AreaDescriptor, AreaHandle, AreaHost, NewProjectInit, ProjectMeta } from '@suite/shared';
 import { WorkspaceStore, IdbBackend, migrateLegacy } from '@suite/shared';
-import type { SavedState } from '@suite/klexel';
-import { PixelDocument, PICO8, encodeKlexel, decodeKlexel, readLegacyState, showToast } from '@suite/klexel';
+import { showToast } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
-import { nextUntitledName, afterRemoveError } from './listModel';
-import { snapshotKey } from './snapshotKey';
+import { nextUntitledName, afterRemoveError, isOpenable } from './listModel';
 import { createProjectList } from './projectList';
 import { createFileActions } from './fileMenu';
 
@@ -15,28 +15,31 @@ export interface Shell {
   switchProject(id: string): Promise<void>;
 }
 
-const canOpen = (m: ProjectMeta) => m.kind === 'klexel';
+const BLANK: NewProjectInit = { width: 32, height: 32 };
 
-function blankPayload(init: NewProjectInit, palette: number[] = [...PICO8], color = palette[8] ?? 0xffffffff): SavedState {
-  const doc = new PixelDocument(init.width, init.height);
-  if (init.image) doc.data.set(init.image.pixels);
-  return encodeKlexel(doc, palette, color);
-}
+/**
+ * Startet die Hülle mit den Bereichen dieses Builds. Vorerst wird genau ein Bereich eingehängt (der erste);
+ * Projekte anderer Arten bleiben erhalten und sind in der Liste als „nicht verfügbar" gekennzeichnet.
+ */
+export async function startShell(app: HTMLElement, descriptors: readonly AreaDescriptor<unknown>[]): Promise<Shell> {
+  const area = descriptors[0];
+  if (!area) throw new Error('Kein Bereich in diesem Build enthalten');
+  const byKind = (kind: string) => descriptors.find(d => d.kind === kind);
+  const canOpen = (m: ProjectMeta) => isOpenable(m, [area.kind]);
+  // Editor schon laden, während der Workspace gelesen wird (eigener Chunk)
+  const areaModule = area.load();
+  areaModule.catch(() => undefined); // Fehler erst beim Einhängen melden
 
-// Für die Übernahme: nur ein lesbarer Alt-Stand wird übernommen (Unlesbares nicht)
-async function readLegacyKlexel(): Promise<unknown | null> {
-  const raw = await readLegacyState();
-  return raw !== null && decodeKlexel(raw) ? raw : null;
-}
-
-export async function startShell(app: HTMLElement): Promise<Shell> {
   const kv = new IdbBackend();
   const store = new WorkspaceStore(kv);
 
-  try {
-    await migrateLegacy(store, kv, readLegacyKlexel);
-  } catch (err) {
-    console.error('Übernahme des alten Stands fehlgeschlagen', err);
+  for (const d of descriptors) {
+    if (!d.readLegacy) continue;
+    try {
+      await migrateLegacy(store, kv, () => d.readLegacy!(), { kind: d.kind, name: d.legacyName });
+    } catch (err) {
+      console.error('Übernahme des alten Stands fehlgeschlagen', err);
+    }
   }
 
   // Erst den Stand laden, dann einhängen, dann öffnen (der Link-Dialog prüft beim Einhängen)
@@ -49,12 +52,12 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     const order = [...metas.filter(m => m.id === last), ...metas.filter(m => m.id !== last)];
     for (const m of order) {
       const p = await store.load(m.id);
-      if (decodeKlexel(p)) { initial = { id: m.id, payload: p, hasThumbnail: !!m.thumbnail }; break; }
+      if (area.decode(p) !== null) { initial = { id: m.id, payload: p, hasThumbnail: !!m.thumbnail }; break; }
       console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`);
     }
     if (!initial) {
-      const payload = blankPayload({ width: 32, height: 32 });
-      const meta = await store.create('klexel', nextUntitledName(metas.map(m => m.name)), payload);
+      const payload = area.blank(BLANK);
+      const meta = await store.create(area.kind, nextUntitledName(metas.map(m => m.name)), payload);
       initial = { id: meta.id, payload, hasThumbnail: false };
     }
   } catch (err) {
@@ -67,7 +70,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
   // Zuletzt gesicherter (oder geöffneter) Stand des offenen Projekts
   let saved: { id: string; key: string } | null = null;
   let list: ReturnType<typeof createProjectList> | undefined;
-  let handle!: AreaHandle<SavedState>;
+  let handle!: AreaHandle<unknown>;
   const autosave = createAutosave({
     // Klexel meldet Änderungen bereits entprellt (500 ms); hier nur kurz bündeln, damit das Fenster bis zum
     // Schreiben klein bleibt (beim Neuladen/Schließen bricht der Browser offene IndexedDB-Aufträge ab)
@@ -79,7 +82,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
       const payload = handle.snapshot();
       // Klexel meldet beim Absetzen (flush) immer eine Änderung; ohne echte Änderung nicht schreiben,
       // sonst springt das Datum schon beim bloßen Öffnen und Wechseln nach vorn
-      const key = snapshotKey(payload);
+      const key = area.changeKey(payload);
       if (saved?.id === id && saved.key === key) return;
       const thumbnail = handle.thumbnail();
       await store.save(id, payload, thumbnail ? { thumbnail } : undefined);
@@ -93,19 +96,18 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
   });
   const host: AreaHost = {
     onChange: () => autosave.schedule(),
-    requestNewProject: init => { void newProject(init ?? { width: 32, height: 32 }); },
+    requestNewProject: init => { void newProject(init ?? BLANK); },
     // Während eines Wechsels inaktiv: Klexel ignoriert dann Tastenkürzel (und merkt Größenänderungen nur vor)
     isActive: () => !switching,
   };
 
-  const { mountKlexel } = await import('@suite/klexel/mount');
-  handle = mountKlexel(app, host);
+  handle = (await areaModule).mount(app, host);
 
   /** Öffnet einen geladenen Stand; ohne Vorschau wird beim nächsten Sichern einmal geschrieben (erzeugt sie). */
   function show(id: string, payload: unknown, hasThumbnail: boolean): void {
-    handle.open(payload as SavedState);
+    handle.open(payload);
     currentId = id;
-    saved = hasThumbnail ? { id, key: snapshotKey(handle.snapshot()) } : null;
+    saved = hasThumbnail ? { id, key: area.changeKey(handle.snapshot()) } : null;
   }
 
   if (initial) {
@@ -141,11 +143,10 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     await store.setLastOpened(id);
   }
 
-  async function createAndOpen(init: NewProjectInit, base?: SavedState): Promise<void> {
-    const cur = base ? decodeKlexel(base) : null;
-    const payload = blankPayload(init, cur?.palette, cur?.color);
+  async function createAndOpen(init: NewProjectInit, base?: unknown): Promise<void> {
+    const payload = area.blank(init, base);
     const names = (await store.list()).map(m => m.name);
-    const meta = await store.create('klexel', nextUntitledName(names), payload);
+    const meta = await store.create(area.kind, nextUntitledName(names), payload);
     await openLoaded(meta.id, payload, false);
     autosave.schedule(); // Vorschau erzeugen
   }
@@ -158,7 +159,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
         throw new Error('Wechsel abgebrochen');
       }
       const payload = await store.load(id);
-      if (!decodeKlexel(payload)) {
+      if (area.decode(payload) === null) {
         showToast('Projekt ist nicht lesbar', 3000);
         throw new Error(`Projekt ${id} nicht lesbar`);
       }
@@ -210,13 +211,13 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     });
   }
 
-  /** Nächstes lesbares Klexel-Projekt öffnen, sonst ein leeres anlegen. */
-  async function openFallback(base: SavedState): Promise<void> {
+  /** Nächstes lesbares Projekt des eingehängten Bereichs öffnen, sonst ein leeres anlegen. */
+  async function openFallback(base: unknown): Promise<void> {
     for (const m of (await store.list()).filter(canOpen)) {
       const payload = await store.load(m.id);
-      if (decodeKlexel(payload)) { await openLoaded(m.id, payload, !!m.thumbnail); return; }
+      if (area.decode(payload) !== null) { await openLoaded(m.id, payload, !!m.thumbnail); return; }
     }
-    await createAndOpen({ width: 32, height: 32 }, base);
+    await createAndOpen(BLANK, base);
   }
 
   function duplicateProject(id: string): Promise<void> {
@@ -229,8 +230,9 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
   const files = createFileActions({
     store,
     prepare: () => enqueue(saveCurrent),
-    isKnownKind: kind => kind === 'klexel',
-    validatePayload: (kind, payload) => kind !== 'klexel' || decodeKlexel(payload) !== null,
+    // Arten ohne Bereich in diesem Build werden unverändert übernommen (und sind dann „nicht verfügbar")
+    isKnownKind: kind => byKind(kind) !== undefined,
+    validatePayload: (kind, payload) => { const d = byKind(kind); return !d || d.decode(payload) !== null; },
   });
 
   list = createProjectList({

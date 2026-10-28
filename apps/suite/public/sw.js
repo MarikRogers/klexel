@@ -1,4 +1,9 @@
+// CACHE und BUILD_ASSETS setzt der Build je Bereichs-Auswahl ein (vite.config.ts, Plugin suite-area-branding):
+// eigener Cache-Name je Auswahl, BUILD_ASSETS = alle gebauten Dateien inkl. nachgeladener Bereichs-Chunks.
 const CACHE = 'pixelart-v6';
+const BUILD_ASSETS = [];
+// Nur ältere Fassungen desselben Builds aufräumen, nie die Caches einer anderen Auslieferung auf derselben Adresse
+const CACHE_PREFIX = CACHE.replace(/\d+$/, '');
 const STATIC = ['./', 'impressum.html', 'datenschutz.html', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Beim Installieren alles Nötige vorab laden, inkl. der gehashten JS/CSS-Dateien aus index.html,
@@ -8,14 +13,14 @@ self.addEventListener('install', e => {
     const cache = await caches.open(CACHE);
     const html = await (await fetch('./', { cache: 'reload' })).text();
     const assets = [...html.matchAll(/(?:src|href)="(\.\/assets\/[^"]+)"/g)].map(m => m[1]);
-    await cache.addAll([...STATIC, ...assets]);
+    await cache.addAll([...new Set([...STATIC, ...assets, ...BUILD_ASSETS])]);
     await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k.startsWith(CACHE_PREFIX)).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

@@ -1,0 +1,23 @@
+# @suite/app – Hülle der Suite
+
+## Bereiche beim Bauen wählen (`VITE_AREAS`)
+
+Welche Bereiche im Build stecken, legt die Umgebungsvariable `VITE_AREAS` fest (kommagetrennt, Groß-/Kleinschreibung
+und Leerzeichen egal): `klexel`, `rigsprite` oder beide. Ohne `VITE_AREAS` werden alle Bereiche gebaut; ein leerer Wert
+oder ein unbekannter Name bricht den Build mit einer Meldung ab. Ein abgeschalteter Bereich fehlt komplett im Bundle
+(und damit im Service-Worker-Cache); Projekte seiner Art bleiben im Workspace erhalten und sind als „nicht verfügbar"
+gekennzeichnet.
+
+```sh
+npm run build                                   # alle Bereiche
+VITE_AREAS=klexel npm run build                 # nur Klexel (PowerShell: $env:VITE_AREAS='klexel'; npm run build)
+node apps/suite/scripts/verify-bundle.mjs klexel # prüft dist/ anhand der AREA_MARKER-Konstanten der Bereiche
+npm run deploy -- --areas klexel                # bauen, prüfen, auf gh-pages veröffentlichen
+npm run deploy -- --areas klexel --dry-run      # nur bauen und prüfen, nichts veröffentlichen
+```
+
+Name, Titel und Manifest richten sich nach der Auswahl (nur Rigsprite → „RigSprite", sonst „Klexel"); der Cache-Name des
+Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v6`).
+
+**Stand:** Rigsprite ist noch nicht eingebunden. Bis dahin enthält auch der Standard-Build nur Klexel, und ein Build nur
+mit `rigsprite` bricht mit „Rigsprite ist noch nicht eingebunden" ab.

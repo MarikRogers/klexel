@@ -1,5 +1,5 @@
 import type { ProjectMeta } from '@suite/shared';
-import { filterProjects, formatUpdated, parseSize } from './listModel';
+import { filterProjects, formatUpdated, parseSize, projectBadges } from './listModel';
 
 export interface ProjectListDeps {
   list(): Promise<ProjectMeta[]>;
@@ -131,8 +131,7 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
       const name = el('div', 'pl-name', m.name);
       name.title = m.name;
       const meta = el('div', 'pl-meta', formatUpdated(m.updatedAt, now));
-      if (m.id === cur) meta.append(el('span', 'pl-badge', 'geöffnet'));
-      if (!usable) meta.append(el('span', 'pl-badge off', 'nicht verfügbar'));
+      for (const b of projectBadges(m, cur, usable)) meta.append(el('span', b.off ? 'pl-badge off' : 'pl-badge', b.text));
       info.append(name, meta);
       const actions = el('div', 'pl-actions');
       const openBtn = button('Öffnen', 'primary', () => void act(async () => { await deps.open(m.id); dlg.close(); }));

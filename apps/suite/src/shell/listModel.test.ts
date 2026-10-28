@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextUntitledName, filterProjects, formatUpdated, parseSize, afterRemoveError } from './listModel';
+import { nextUntitledName, filterProjects, formatUpdated, parseSize, afterRemoveError, isOpenable, projectBadges } from './listModel';
 import type { ProjectMeta } from '@suite/shared';
 
 const meta = (name: string): ProjectMeta => ({ id: name, kind: 'klexel', name, updatedAt: 0 });
@@ -63,5 +63,18 @@ describe('afterRemoveError', () => {
   it('Projekt schon entfernt → anderes öffnen', () => {
     expect(afterRemoveError('A', [meta('B')])).toBe('fallback');
     expect(afterRemoveError('A', [])).toBe('fallback');
+  });
+});
+
+describe('Arten ohne Bereich', () => {
+  const rig: ProjectMeta = { id: 'R', kind: 'rigsprite', name: 'Rig', updatedAt: 0 };
+  it('Projekt einer Art ohne Bereich ist nicht öffenbar und als „nicht verfügbar" gekennzeichnet', () => {
+    expect(isOpenable(rig, ['klexel'])).toBe(false);
+    expect(isOpenable(meta('A'), ['klexel'])).toBe(true);
+    expect(projectBadges(rig, 'A', isOpenable(rig, ['klexel']))).toEqual([{ text: 'nicht verfügbar', off: true }]);
+  });
+  it('geöffnetes, verfügbares Projekt: nur „geöffnet"', () => {
+    expect(projectBadges(meta('A'), 'A', true)).toEqual([{ text: 'geöffnet', off: false }]);
+    expect(projectBadges(meta('A'), 'B', true)).toEqual([]);
   });
 });

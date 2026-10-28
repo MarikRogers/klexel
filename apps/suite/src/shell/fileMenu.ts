@@ -1,6 +1,6 @@
 import type { WorkspaceStore } from '@suite/shared';
 import { exportWorkspace, importWorkspace } from '@suite/shared';
-import { saveBlob, showToast } from '@suite/klexel';
+import { saveBlob, showToast } from '@suite/shared/ui';
 
 export interface FileActions {
   exportAll(): Promise<void>;

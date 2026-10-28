@@ -67,4 +67,14 @@ describe('migrateLegacy', () => {
     expect(await migrateLegacy(ws, kv, async () => ({ a: 1 }))).toBe('migrated');
     expect(await ws.list()).toHaveLength(1);
   });
+
+  it('andere Art: eigener Marker und Name, unabhängig von Klexel', async () => {
+    const { kv, ws } = setup();
+    await migrateLegacy(ws, kv, async () => ({ k: 1 }));
+    expect(await migrateLegacy(ws, kv, async () => ({ r: 1 }), { kind: 'rigsprite', name: 'Mein Rig' })).toBe('migrated');
+    expect(await kv.get('ws:migrated:rigsprite')).toBeTruthy();
+    const list = await ws.list();
+    expect(list.map(m => [m.kind, m.name]).sort()).toEqual([['klexel', 'Mein Bild'], ['rigsprite', 'Mein Rig']]);
+    expect(await migrateLegacy(ws, kv, async () => ({ r: 1 }), { kind: 'rigsprite' })).toBe('done-before');
+  });
 });

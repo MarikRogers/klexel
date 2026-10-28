@@ -1,5 +1,8 @@
 import type { ProjectKind } from './workspace/types';
 
+/** Größte Bildbreite/-höhe neuer Projekte (Klexel: MAX_SIZE). */
+export const MAX_IMAGE_SIZE = 128;
+
 /** Startwerte für ein neues Projekt (Größe, optional ein Bild, z. B. aus einem Link). */
 export interface NewProjectInit {
   width: number;

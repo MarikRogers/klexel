@@ -1,4 +1,7 @@
-export const MAX_SIZE = 128;
+import { MAX_IMAGE_SIZE } from '@suite/shared';
+
+/** Größte Bildbreite/-höhe; gemeinsam mit der Hülle festgelegt (128). */
+export const MAX_SIZE = MAX_IMAGE_SIZE;
 export const MAX_LAYERS = 16;
 export const MAX_FRAMES = 64;
 export const MAX_PIXELS = 16_000_000;

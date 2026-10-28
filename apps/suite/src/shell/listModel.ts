@@ -1,4 +1,4 @@
-import { MAX_SIZE } from '@suite/klexel';
+import { MAX_IMAGE_SIZE } from '@suite/shared';
 import type { ProjectMeta } from '@suite/shared';
 
 /** „Unbenannt", sonst die kleinste freie Nummer („Unbenannt 2", …). */
@@ -28,11 +28,24 @@ export function formatUpdated(ts: number, now = Date.now()): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
-/** Bildgröße aus einem Eingabefeld: ganze Zahl 1..MAX_SIZE, sonst null. */
+/** Bildgröße aus einem Eingabefeld: ganze Zahl 1..MAX_IMAGE_SIZE, sonst null. */
 export function parseSize(v: string): number | null {
   if (!/^\s*\d+\s*$/.test(v)) return null;
   const n = Number(v);
-  return n >= 1 && n <= MAX_SIZE ? n : null;
+  return n >= 1 && n <= MAX_IMAGE_SIZE ? n : null;
+}
+
+/** Lässt sich das Projekt in diesem Build öffnen? Nur, wenn ein Bereich seiner Art enthalten ist. */
+export function isOpenable(meta: ProjectMeta, kinds: readonly string[]): boolean {
+  return kinds.includes(meta.kind);
+}
+
+/** Kennzeichen eines Eintrags in der Projektliste („geöffnet", „nicht verfügbar"). */
+export function projectBadges(meta: ProjectMeta, currentId: string | null, usable: boolean): Array<{ text: string; off: boolean }> {
+  const out: Array<{ text: string; off: boolean }> = [];
+  if (meta.id === currentId) out.push({ text: 'geöffnet', off: false });
+  if (!usable) out.push({ text: 'nicht verfügbar', off: true });
+  return out;
 }
 
 /**

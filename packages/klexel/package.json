@@ -4,9 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./mount": "./src/klexel.ts",
-    "./style.css": "./src/style.css"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "test": "vitest run",
