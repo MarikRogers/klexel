@@ -1,7 +1,9 @@
+import type { RigTemplateId } from '../core/rig';
 import { RIG_TEMPLATES } from '../core/templates/rigs';
 import { useEditor } from '../state/store';
 
-export function NewProjectDialog({ onClose }: { onClose: () => void }) {
+/** `onPick` replaces the default (start a new project in place), e.g. in the suite: a new workspace project. */
+export function NewProjectDialog({ onClose, onPick }: { onClose: () => void; onPick?: (t: RigTemplateId) => void }) {
   return (
     <div className="dialog-backdrop">
       <div className="dialog" role="dialog" aria-label="Neues Projekt">
@@ -12,7 +14,8 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
             <button
               key={t.id}
               onClick={() => {
-                useEditor.getState().newProject(t.id);
+                if (onPick) onPick(t.id);
+                else useEditor.getState().newProject(t.id);
                 onClose();
               }}
             >

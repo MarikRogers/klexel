@@ -220,13 +220,20 @@ function parseSettings(raw: unknown): ProjectSettings {
   };
 }
 
-export function parseProject(text: string): { ok: true; project: Project } | { ok: false; error: string } {
+export type ParseResult = { ok: true; project: Project } | { ok: false; error: string };
+
+export function parseProject(text: string): ParseResult {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
     return { ok: false, error: INVALID_JSON };
   }
+  return parseProjectData(data);
+}
+
+/** Validates an already parsed value (e.g. a project stored as an object) like parseProject, without JSON.parse. */
+export function parseProjectData(data: unknown): ParseResult {
   try {
     if (!isObj(data)) return { ok: false, error: 'Die Datei ist kein gültiges Projekt.' };
     if (data.version !== 1) return { ok: false, error: 'Das Projekt hat eine nicht unterstützte Version.' };

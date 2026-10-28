@@ -32,4 +32,5 @@ export const klexelDescriptor: AreaDescriptor<SavedState> & { marker: string } =
     return raw !== null && decodeKlexel(raw) ? raw : null;
   },
   legacyName: 'Mein Bild',
+  newProjectSize: true,
 };

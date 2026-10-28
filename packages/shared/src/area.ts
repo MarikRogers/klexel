@@ -14,8 +14,13 @@ export interface NewProjectInit {
 export interface AreaHost {
   /** Projekt wurde verändert, Autosave anstoßen */
   onChange(): void;
-  /** Ein neues Projekt anlegen (statt das aktuelle zu ersetzen) */
-  requestNewProject(init?: NewProjectInit): void;
+  /**
+   * Ein neues Projekt dieses Bereichs anlegen (statt das aktuelle zu ersetzen). content = fertiger Inhalt
+   * (z. B. aus einer Datei); fehlt er oder ist er nicht lesbar, entsteht ein leeres Projekt aus init.
+   */
+  requestNewProject(init?: NewProjectInit, content?: unknown): void;
+  /** Projektliste der Hülle zeigen (für Bereiche ohne eigenen Knopf der Hülle in ihrer Kopfleiste) */
+  openProjects?(): void;
   /** Ist der Bereich gerade sichtbar und bedienbar? */
   isActive(): boolean;
 }

@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import type { SpriteAxis } from '../core/part';
-import { projectHasContent } from '../core/project';
-import { downloadProject, openProjectFile } from '../state/persistence';
+import { createProject, projectHasContent } from '../core/project';
+import { downloadProject, openProjectFile, readProjectFile } from '../state/persistence';
 import { useEditor } from '../state/store';
 import { CameraControls } from './CameraControls';
 import { CommitInput } from './CommitInput';
 import { ExportDialog } from './ExportDialog';
 import { NewProjectDialog } from './NewProjectDialog';
+import { useSuite } from './suiteBridge';
 
 function ProjectName() {
   const name = useEditor((s) => s.project.name);
@@ -33,8 +34,16 @@ export function Toolbar() {
   const [openError, setOpenError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const suite = useSuite();
+  // In the suite "Neu" / "Öffnen" create a new workspace project: nothing is discarded.
   const confirmDiscard = () =>
-    !projectHasContent(useEditor.getState().project) || confirm('Aktuelles Projekt verwerfen?');
+    !!suite || !projectHasContent(useEditor.getState().project) || confirm('Aktuelles Projekt verwerfen?');
+  const openFile = async (file: File) => {
+    if (!suite) return setOpenError(await openProjectFile(file));
+    const res = await readProjectFile(file);
+    if (res.ok) suite.newProject(res.project);
+    setOpenError(res.ok ? null : res.error);
+  };
   const requestNew = () => {
     if (confirmDiscard()) setDialog(true);
   };
@@ -44,8 +53,13 @@ export function Toolbar() {
 
   return (
     <header className="toolbar">
-      <img className="tb-logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="RigSprite" width={24} height={24} />
+      <img className="tb-logo" src={suite?.logoUrl ?? `${import.meta.env.BASE_URL}logo.png`} alt="RigSprite" width={24} height={24} />
       <div className="tb-group">
+        {suite && (
+          <button onClick={() => suite.openProjects()} title="Projekte">
+            Projekte
+          </button>
+        )}
         <button onClick={requestNew}>Neu</button>
         <button onClick={requestOpen}>Öffnen</button>
         <button onClick={() => downloadProject(useEditor.getState().project)}>Speichern</button>
@@ -57,7 +71,7 @@ export function Toolbar() {
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = '';
-            if (file) void openProjectFile(file).then(setOpenError);
+            if (file) void openFile(file);
           }}
         />
         <ProjectName />
@@ -115,7 +129,12 @@ export function Toolbar() {
           </button>
         </div>
       )}
-      {dialog && <NewProjectDialog onClose={() => setDialog(false)} />}
+      {dialog && (
+        <NewProjectDialog
+          onClose={() => setDialog(false)}
+          onPick={suite ? (t) => suite.newProject(createProject(t)) : undefined}
+        />
+      )}
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
     </header>
   );

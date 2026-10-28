@@ -20,4 +20,6 @@ export interface AreaDescriptor<P> {
   readLegacy?(): Promise<unknown | null>;
   /** Name des übernommenen Alt-Stands in der Projektliste */
   legacyName?: string;
+  /** Fragt „Neues Projekt" in der Projektliste nach Breite und Höhe? (Klexel ja, Rigsprite nein) */
+  newProjectSize?: boolean;
 }

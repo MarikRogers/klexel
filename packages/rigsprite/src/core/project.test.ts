@@ -5,6 +5,7 @@ import {
   matchBoneByFilename,
   normalizeCameraAngle,
   parseProject,
+  parseProjectData,
   projectHasContent,
   serializeProject,
   toFrameInput,
@@ -225,5 +226,35 @@ describe('animationById', () => {
     expect(animationById(p, 'a1')).toBe(p.animations[0]);
     expect(animationById(p, 'nope')).toBeUndefined();
     expect(animationById(p, null)).toBeUndefined();
+  });
+});
+
+describe('parseProjectData', () => {
+  it('accepts the parsed object of a serialized project and yields the same as parseProject', () => {
+    const p = sample();
+    const text = serializeProject(p);
+    const r = parseProjectData(JSON.parse(text));
+    expect(r).toEqual(parseProject(text));
+    expect(r.ok && r.project).toEqual(p);
+  });
+
+  it('accepts a project object directly (e.g. stored by structured clone)', () => {
+    const p = sample();
+    const r = parseProjectData(p);
+    expect(r.ok && r.project).toEqual(p);
+  });
+
+  it('rejects non-objects and invalid projects with the same messages as parseProject', () => {
+    for (const v of [null, undefined, 42, 'text', [], { version: 2 }, { version: 1 }]) {
+      const r = parseProjectData(v);
+      expect(r.ok).toBe(false);
+      if (v !== undefined) expect(r).toEqual(parseProject(JSON.stringify(v)));
+    }
+  });
+
+  it('does not throw on broken nested data', () => {
+    const raw = JSON.parse(serializeProject(sample()));
+    raw.rig.bones[0].length = -1;
+    expect(parseProjectData(raw).ok).toBe(false);
   });
 });

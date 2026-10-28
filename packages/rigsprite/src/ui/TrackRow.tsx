@@ -1,6 +1,6 @@
 import { keyedFrames, type Animation } from '../core/animation';
 import type { Bone } from '../core/rig';
-import { editor, useEditor } from '../state/store';
+import { editor } from '../state/store';
 import { NAME_COLUMN_WIDTH } from './constants';
 import { Playhead } from './Playhead';
 import type { KeyDragHandlers, KeyRef } from './useKeyDrag';

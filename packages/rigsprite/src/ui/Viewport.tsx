@@ -11,6 +11,7 @@ import { useEditor, type EditorState } from '../state/store';
 import { OrbitControls } from './OrbitControls';
 import { capturePointer } from './pointer';
 import { createFrameCache } from './viewportFrame';
+import { registerViewportCapture } from './viewportCapture';
 import { createViewportGestures, type GesturePointer } from './viewportGestures';
 import { cssView, deviceView, zoomAt, type ViewportSize } from './viewportView';
 
@@ -112,6 +113,17 @@ export function Viewport() {
       if (s.showRig) drawOverlay(ctx, s.project.rig, world, v, s.selectedBoneId);
     }
 
+    // Still image for the suite's project list: draw now (same task), so the GL buffer still holds the frame.
+    const unregisterCapture = registerViewportCapture(() => {
+      if (disposed) return null;
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      draw();
+      return [glCanvas, overlay];
+    });
+
     const resizeObserver = new ResizeObserver(() => {
       size = fitCanvases(container, [glCanvas, overlay]);
       schedule();
@@ -147,6 +159,7 @@ export function Viewport() {
     return () => {
       gestures.dispose();
       disposed = true;
+      unregisterCapture();
       images.dispose();
       if (raf) cancelAnimationFrame(raf);
       removeListeners();

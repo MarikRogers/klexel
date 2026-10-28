@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { addListeners } from '../dom/listeners';
-import { editor, useEditor } from '../state/store';
+import { editor } from '../state/store';
 import { CAMERA_KEY_STEP_DEG, ORBIT_FRONT, ORBIT_SIDE, ORBIT_TOP } from './constants';
 import { isSpaceSensitiveTarget, isTextEntryTarget } from './keyboard';
 
@@ -148,7 +148,19 @@ const registered = new Set<() => Shortcut>();
 
 const activeShortcuts = (): Shortcut[] => [...SHORTCUTS, ...[...registered].map((get) => get())];
 
+// Extra condition for all global shortcuts (the suite turns them off while Rigsprite is hidden or switching).
+let gate: () => boolean = () => true;
+
+/** Global shortcuts run only while `fn()` is true; returns a function that restores the default (always on). */
+export function setShortcutGate(fn: () => boolean): () => void {
+  gate = fn;
+  return () => {
+    if (gate === fn) gate = () => true;
+  };
+}
+
 const onKey = (e: KeyboardEvent) => {
+  if (!gate()) return;
   dispatchShortcut(activeShortcuts(), e);
 };
 const onBlur = () => editor().setSpaceHeld(false);

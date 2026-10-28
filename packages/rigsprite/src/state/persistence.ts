@@ -1,7 +1,7 @@
 import { get, set } from 'idb-keyval';
 import { FILE_UNREADABLE } from '../core/messages';
 import { sanitizeFileName } from '../core/export';
-import { parseProject, serializeProject, type Project } from '../core/project';
+import { parseProject, serializeProject, type ParseResult, type Project } from '../core/project';
 import { download } from '../dom/download';
 import { useEditor } from './store';
 
@@ -61,15 +61,20 @@ export async function restoreAutosave(store: Store = useEditor): Promise<boolean
   }
 }
 
-/** Returns null on success, otherwise an error message. The project stays untouched on failure. */
-export async function openProjectFile(file: File, store: Store = useEditor): Promise<string | null> {
+/** Reads and validates a project file. */
+export async function readProjectFile(file: File): Promise<ParseResult> {
   let text: string;
   try {
     text = await file.text();
   } catch {
-    return FILE_UNREADABLE;
+    return { ok: false, error: FILE_UNREADABLE };
   }
-  const res = parseProject(text);
+  return parseProject(text);
+}
+
+/** Returns null on success, otherwise an error message. The project stays untouched on failure. */
+export async function openProjectFile(file: File, store: Store = useEditor): Promise<string | null> {
+  const res = await readProjectFile(file);
   if (!res.ok) return res.error;
   store.getState().loadProject(res.project);
   return null;
