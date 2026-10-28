@@ -1,6 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { boneById, boneTip, computeWorldTransforms, descendantIds, getRestPose, rigHeight, sanitizeBonePatch, type Bone, type Rig } from './rig';
+import {
+  boneById,
+  boneTip,
+  computeWorldTransforms,
+  computeWorldTransforms3D,
+  descendantIds,
+  getRestPose,
+  poseUsesDepth,
+  rigHeight,
+  sanitizeBonePatch,
+  type Bone,
+  type Rig,
+} from './rig';
 import { invert } from './math';
+import { applyToPoint3, projectTo2D } from './math3d';
+import { RIG_TEMPLATES } from './templates/rigs';
+
+describe('rig FK in 3D', () => {
+  it('without a pose the projected 3D chain equals the 2D chain bit for bit', () => {
+    for (const t of RIG_TEMPLATES) {
+      const w2 = computeWorldTransforms(t.rig);
+      const w3 = computeWorldTransforms3D(t.rig, {});
+      for (const bone of t.rig.bones) expect(projectTo2D(w3[bone.id])).toEqual(w2[bone.id]);
+    }
+  });
+
+  it('a child follows its tilted parent: the child origin comes forward', () => {
+    const down: Rig = {
+      bones: [
+        { id: 'a', name: 'a', parentId: null, x: 0, y: 0, rotation: 90, length: 10, softness: 4 },
+        { id: 'b', name: 'b', parentId: 'a', x: 10, y: 0, rotation: 0, length: 10, softness: 4 },
+      ],
+    };
+    const w = computeWorldTransforms3D(down, { a: { tilt: 60 } });
+    const origin = applyToPoint3(w.b, { x: 0, y: 0, z: 0 });
+    expect(origin.y).toBeCloseTo(5, 9);
+    expect(origin.z).toBeCloseTo(10 * Math.sin((60 * Math.PI) / 180), 9);
+  });
+
+  it('depth of a bone moves it and its children along z', () => {
+    const w = computeWorldTransforms3D(rig, { a: { depth: 7 } });
+    expect(applyToPoint3(w.b, { x: 0, y: 0, z: 0 }).z).toBe(7);
+  });
+
+  it('poseUsesDepth is true only for a non-zero tilt, turn or depth', () => {
+    expect(poseUsesDepth({})).toBe(false);
+    expect(poseUsesDepth({ a: { rotation: 5, scaleX: 2 } })).toBe(false);
+    expect(poseUsesDepth({ a: { depth: 0, tilt: 0 } })).toBe(false);
+    expect(poseUsesDepth({ a: { tilt: 1 } })).toBe(true);
+    expect(poseUsesDepth({ b: { turn: -1 } })).toBe(true);
+    expect(poseUsesDepth({ b: { depth: 2 } })).toBe(true);
+  });
+});
 
 const a: Bone = { id: 'a', name: 'a', parentId: null, x: 0, y: 0, rotation: 0, length: 10, softness: 4 };
 const b: Bone = { id: 'b', name: 'b', parentId: 'a', x: 10, y: 0, rotation: 0, length: 10, softness: 4 };

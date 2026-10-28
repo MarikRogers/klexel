@@ -16,6 +16,11 @@ export const DEFAULT_LAYER_SPACING = 12;
 export const MIN_LAYER_SPACING = 0;
 export const MAX_LAYER_SPACING = 100;
 
+/** Largest tilt / turn of a bone in degrees: keeps the projected bone matrix invertible. */
+export const MAX_DEPTH_ANGLE_DEG = 85;
+/** Part depths are rounded to this many rig pixels before they decide the draw order. */
+export const DEPTH_SORT_STEP = 1;
+
 /** Length of a freshly added bone. */
 export const DEFAULT_BONE_LENGTH = 20;
 

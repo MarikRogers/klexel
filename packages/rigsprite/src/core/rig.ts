@@ -1,5 +1,6 @@
 import { MIN_BONE_LENGTH, MIN_SOFTNESS } from './defaults';
 import { applyToPoint, fromTRS, invert, multiply, type Mat2D, type Vec2 } from './math';
+import { fromBone3D, multiply3, type Mat3D } from './math3d';
 
 export interface Bone {
   id: string;
@@ -22,6 +23,10 @@ export interface BoneOffset {
   y: number;
   scaleX: number;
   scaleY: number;
+  /** Depth channels (see math3d fromBone3D); absent = 0. */
+  tilt?: number;
+  turn?: number;
+  depth?: number;
 }
 
 export type Pose = Record<string, Partial<BoneOffset>>;
@@ -55,6 +60,43 @@ export function computeWorldTransforms(rig: Rig, pose: Pose = {}): Record<string
     );
     const parent = bone.parentId !== null ? byId.get(bone.parentId) : undefined;
     const world = parent ? multiply(resolve(parent), local) : local;
+    result[bone.id] = world;
+    return world;
+  };
+
+  for (const bone of rig.bones) resolve(bone);
+  return result;
+}
+
+/** True if any bone of `pose` has a tilt, turn or depth other than 0. */
+export function poseUsesDepth(pose: Pose): boolean {
+  for (const o of Object.values(pose)) {
+    if (o.tilt || o.turn || o.depth) return true;
+  }
+  return false;
+}
+
+/** Like computeWorldTransforms, with the depth channels: the bone chain in 3D (orthographic, z towards the camera). */
+export function computeWorldTransforms3D(rig: Rig, pose: Pose = {}): Record<string, Mat3D> {
+  const byId = new Map(rig.bones.map((b) => [b.id, b]));
+  const result: Record<string, Mat3D> = {};
+
+  const resolve = (bone: Bone): Mat3D => {
+    const cached = result[bone.id];
+    if (cached) return cached;
+    const o = pose[bone.id] ?? {};
+    const local = fromBone3D({
+      x: bone.x + (o.x ?? 0),
+      y: bone.y + (o.y ?? 0),
+      z: o.depth ?? 0,
+      rotation: bone.rotation + (o.rotation ?? 0),
+      tilt: o.tilt ?? 0,
+      turn: o.turn ?? 0,
+      scaleX: o.scaleX ?? 1,
+      scaleY: o.scaleY ?? 1,
+    });
+    const parent = bone.parentId !== null ? byId.get(bone.parentId) : undefined;
+    const world = parent ? multiply3(resolve(parent), local) : local;
     result[bone.id] = world;
     return world;
   };

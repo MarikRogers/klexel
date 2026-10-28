@@ -29,7 +29,7 @@ Auslöser: Die neuen Vorder- und Rückansicht-Vorlagen (Rig und Animationen) kö
 
 ## Verhalten
 
-**Neue Bone-Werte (Pose, animierbar).** Zusätzlich zu Position, Rotation und Skalierung hat jeder Bone: *Kippen* (Drehung um die waagerechte Querachse, vor/zurück), *Drehen* (Drehung um die senkrechte Hochachse) und *Tiefe* (Verschiebung zur Kamera hin oder von ihr weg). Alle starten bei 0. Sie wirken wie die bisherigen Werte entlang der Bone-Kette: Ein Kind-Bone folgt der Bewegung seines Elternteils.
+**Neue Bone-Werte (Pose, animierbar).** Zusätzlich zu Position, Rotation und Skalierung hat jeder Bone: *Kippen* (die Spitze des Bones schwingt zur Kamera hin oder von ihr weg; Drehung um die Querachse des Bones), *Drehen* (Drehung um die Bone-Achse selbst; bei einem nach unten zeigenden Bein die Hochachse) und *Tiefe* (Verschiebung zur Kamera hin oder von ihr weg). Alle starten bei 0. Sie wirken wie die bisherigen Werte entlang der Bone-Kette: Ein Kind-Bone folgt der Bewegung seines Elternteils.
 
 **Projektion.** Orthografisch: Die Bildschirmposition ist x/y der 3D-Position, die Tiefe wird nur zum Sortieren benutzt. Die Sprites werden in ihrer Bone-Ebene verformt, wie es die Neigung ergibt (Kippen verkürzt senkrecht, Drehen verkürzt waagerecht). Sehr schmale Sprites bei fast 90° sind erwartetes Verhalten.
 
