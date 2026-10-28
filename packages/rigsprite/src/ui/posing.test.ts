@@ -37,3 +37,10 @@ describe('translationOffsetToward', () => {
     expect(o).toEqual({ x: 3, y: 4 });
   });
 });
+
+describe('singular parent matrices', () => {
+  it('translationOffsetToward falls back to the unconverted delta instead of throwing', () => {
+    const pose = { a: { scaleX: 0 } };
+    expect(translationOffsetToward(rig, pose, 'b', { x: 3, y: 4 })).toEqual({ x: 3, y: 4 });
+  });
+});

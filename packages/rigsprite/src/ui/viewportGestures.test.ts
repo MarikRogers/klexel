@@ -6,6 +6,7 @@ import { worldToScreen } from '../render/view';
 import { useEditor } from '../state/store';
 import { makeImageAsset } from '../test/fixtures';
 import { DRAG_THRESHOLD_PX } from './constants';
+import { boneScreenDir, tiltFromDrag, tiltHandleScreenPos } from './tiltHandle';
 import { createFrameCache } from './viewportFrame';
 import { createViewportGestures, type GesturePointer, type ViewportGestures } from './viewportGestures';
 import { cssView } from './viewportView';
@@ -270,5 +271,56 @@ describe('viewport gestures', () => {
     g.move(ptr(add(again, 40)));
     g.dispose();
     expect(history()).toBe(2);
+  });
+});
+
+describe('tilt handle drag', () => {
+  const handleOf = (id: string) =>
+    tiltHandleScreenPos(view(), frame(s()).world[id], boneById(s().project.rig, id)!);
+  const tiltKeys = () => s().project.animations[0].tracks.thigh_L?.tilt ?? [];
+
+  beforeEach(() => {
+    s().addAnimation('walk');
+    s().setMode('animate');
+    s().select('thigh_L');
+    useEditor.temporal.getState().clear();
+  });
+
+  it('dragging the handle along the bone sets tilt and is one undo step', () => {
+    const start = handleOf('thigh_L');
+    const dir = boneScreenDir(view(), frame(s()).world.thigh_L, boneById(s().project.rig, 'thigh_L')!);
+    g.down(ptr(start));
+    expect(g.current.kind).toBe('tilt');
+    g.move(ptr(add(start, dir.x * 30, dir.y * 30)));
+    g.move(ptr(add(start, dir.x * 50, dir.y * 50)));
+    g.end(1, true);
+    expect(tiltKeys()).toEqual([{ frame: 0, value: tiltFromDrag(0, 50), easing: 'linear' }]);
+    expect(history()).toBe(1);
+    expect(s().selectedBoneId).toBe('thigh_L');
+  });
+
+  it('a second finger cancels the tilt without a key or undo entry', () => {
+    const start = handleOf('thigh_L');
+    g.down(ptr(start));
+    g.move(ptr(add(start, 0, 40)));
+    g.down(ptr({ x: 5, y: 5 }, { pointerId: 2, pointerType: 'touch' }));
+    expect(g.current.kind).toBe('pinch');
+    expect(tiltKeys()).toEqual([]);
+    expect(history()).toBe(0);
+  });
+
+  it('is not available while the project is locked', () => {
+    s().setSettings({ depthLocked: true });
+    useEditor.temporal.getState().clear();
+    g.down(ptr(handleOf('thigh_L')));
+    expect(g.current.kind).not.toBe('tilt');
+    g.end(1, true);
+    expect(tiltKeys()).toEqual([]);
+  });
+
+  it('is not available in setup mode', () => {
+    s().setMode('setup');
+    g.down(ptr(handleOf('thigh_L')));
+    expect(g.current.kind).not.toBe('tilt');
   });
 });

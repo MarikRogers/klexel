@@ -6,6 +6,10 @@ export const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 export const DRAG_THRESHOLD_PX = 3;
 /** Bone hit radius around the drawn bone, in screen px (mouse / pen). */
 export const BONE_HIT_PX = 6;
+/** Tilt handle: distance from the bone (screen px), mouse hit radius (px; a finger gets twice) and degrees per dragged px. */
+export const TILT_HANDLE_OFFSET_PX = 28;
+export const TILT_HANDLE_HIT_PX = 11;
+export const TILT_DEG_PER_PX = 0.8;
 /** Fingers are less precise than a mouse cursor: touch hit radius = BONE_HIT_PX · factor. */
 export const TOUCH_HIT_FACTOR = 3;
 

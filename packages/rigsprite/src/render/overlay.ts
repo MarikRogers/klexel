@@ -1,4 +1,4 @@
-import { clamp, dist, TAU, type Mat2D } from '../core/math';
+import { clamp, dist, TAU, type Mat2D, type Vec2 } from '../core/math';
 import { boneOrigin, boneTip, type Rig } from '../core/rig';
 import { worldToScreen, type ViewTransform } from './view';
 
@@ -22,6 +22,7 @@ export function drawOverlay(
   world: Record<string, Mat2D>,
   view: ViewTransform,
   selectedBoneId: string | null,
+  handle: { pos: Vec2; dir: Vec2 } | null = null,
 ): void {
   const ordered = [...rig.bones].sort((a, b) => Number(a.id === selectedBoneId) - Number(b.id === selectedBoneId));
   ctx.save();
@@ -58,5 +59,32 @@ export function drawOverlay(
     ctx.fill();
     ctx.stroke();
   }
+  if (handle) drawTiltHandle(ctx, handle.pos, handle.dir);
   ctx.restore();
+}
+
+const HANDLE_RADIUS_PX = 8;
+const HANDLE_ARROW_PX = 5;
+
+/** The tilt handle: a circle with a double arrow along the bone (drag towards the tip = tip comes forward). */
+function drawTiltHandle(ctx: CanvasRenderingContext2D, pos: Vec2, dir: Vec2): void {
+  ctx.fillStyle = SELECTED_FILL;
+  ctx.strokeStyle = SELECTED_STROKE;
+  ctx.lineWidth = LINE_WIDTH_PX.selected;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, HANDLE_RADIUS_PX, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = LINE_WIDTH_PX.normal;
+  ctx.beginPath();
+  for (const sign of [-1, 1]) {
+    const tipX = pos.x + dir.x * sign * HANDLE_ARROW_PX;
+    const tipY = pos.y + dir.y * sign * HANDLE_ARROW_PX;
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(tipX + (-dir.x * sign + dir.y) * 2, tipY + (-dir.y * sign - dir.x) * 2);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(tipX + (-dir.x * sign - dir.y) * 2, tipY + (-dir.y * sign + dir.x) * 2);
+  }
+  ctx.stroke();
 }

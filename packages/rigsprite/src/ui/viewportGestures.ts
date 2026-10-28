@@ -7,6 +7,7 @@ import { selectActiveAnimation, useEditor, type EditorState } from '../state/sto
 import { BONE_HIT_PX, DRAG_THRESHOLD_PX, ORBIT_DEG_PER_PX, TOUCH_HIT_FACTOR } from './constants';
 import { hitTestBone, hitTestPart } from './hitTest';
 import { rotationOffsetToward, translationOffsetToward } from './posing';
+import { activeTiltHandle, hitTestTiltHandle, sampledTilt, tiltFromDrag } from './tiltHandle';
 
 /** What the gestures need from a pointer event (screen point in CSS pixels relative to the viewport). */
 export interface GesturePointer {
@@ -48,22 +49,31 @@ interface PoseDrag extends DragBase {
   moved: boolean;
 }
 
+interface TiltDrag extends DragBase {
+  kind: 'tilt';
+  boneId: string;
+  startTilt: number;
+  /** Bone direction on the screen at the start; dragging towards the tip tilts it forward. */
+  dir: Vec2;
+  moved: boolean;
+}
+
 interface Pinch {
   kind: 'pinch';
   ids: [number, number];
   prev: [Vec2, Vec2];
 }
 
-export type Gesture = { kind: 'idle' } | PanDrag | OrbitDrag | PartDrag | PoseDrag | Pinch;
-type Drag = PanDrag | OrbitDrag | PartDrag | PoseDrag;
+export type Gesture = { kind: 'idle' } | PanDrag | OrbitDrag | PartDrag | PoseDrag | TiltDrag | Pinch;
+type Drag = PanDrag | OrbitDrag | PartDrag | PoseDrag | TiltDrag;
 
 const IDLE: Gesture = { kind: 'idle' };
 
 const isDrag = (g: Gesture): g is Drag =>
-  g.kind === 'pan' || g.kind === 'orbit' || g.kind === 'part' || g.kind === 'pose';
+  g.kind === 'pan' || g.kind === 'orbit' || g.kind === 'part' || g.kind === 'pose' || g.kind === 'tilt';
 
 /** Part / pose drags change the project only once the pointer moved DRAG_THRESHOLD_PX (then for good). */
-function pastThreshold(d: PartDrag | PoseDrag, p: Vec2): boolean {
+function pastThreshold(d: PartDrag | PoseDrag | TiltDrag, p: Vec2): boolean {
   if (!d.moved && dist(p, d.startScreen) < DRAG_THRESHOLD_PX) return false;
   d.moved = true;
   return true;
@@ -103,10 +113,11 @@ export interface ViewportGestures {
 }
 
 /**
- * Viewport pointer gestures as a state machine `idle | pan | orbit | part | pose | pinch`:
+ * Viewport pointer gestures as a state machine `idle | pan | orbit | part | pose | tilt | pinch`:
  * - left button: select; in setup mode drag a part, in animate mode pose a bone (Shift: translate);
  *   parts are picked on their layer (depth), bones on the rig plane; drags work in depth 0 (deltas
  *   do not depend on the depth);
+ * - in animate mode the tilt handle of the selected bone (when offered, see activeTiltHandle) tilts it;
  * - middle button or Space + left: pan;
  * - right mouse button: orbit the camera (no undo entry); only from idle;
  * - a second finger cancels any one-finger drag (no undo entry) and starts pinch-zoom / pan.
@@ -144,6 +155,20 @@ export function createViewportGestures(ctx: GestureContext): ViewportGestures {
     // A hidden rig is not clickable: only the sprites are.
     const boneAt = () => (s.showRig ? hitTestBone(s.project.rig, world, w, hitPx / view.zoom) : null);
     if (s.mode === 'animate') {
+      // The tilt handle of the selected bone comes before bones and sprites.
+      const handle = activeTiltHandle(s, world, view);
+      if (handle && s.selectedBoneId && hitTestTiltHandle(p, handle.pos, e.pointerType)) {
+        s.beginTransaction();
+        return {
+          kind: 'tilt',
+          pointerId,
+          boneId: s.selectedBoneId,
+          startScreen: p,
+          startTilt: sampledTilt(s, s.selectedBoneId),
+          dir: handle.dir,
+          moved: false,
+        };
+      }
       const boneId =
         boneAt() ??
         (partId ? s.project.parts.find((x) => x.id === partId)!.boneId : null);
@@ -176,6 +201,12 @@ export function createViewportGestures(ctx: GestureContext): ViewportGestures {
       s.poseBone(d.boneId, { rotation: rotationOffsetToward(s.project.rig, pose, d.boneId, w) });
     }
     d.lastWorld = w;
+  };
+
+  const moveTilt = (d: TiltDrag, p: Vec2) => {
+    if (!pastThreshold(d, p)) return;
+    const along = (p.x - d.startScreen.x) * d.dir.x + (p.y - d.startScreen.y) * d.dir.y;
+    store().poseBone(d.boneId, { tilt: tiltFromDrag(d.startTilt, along) });
   };
 
   const movePart = (d: PartDrag, p: Vec2) => {
@@ -247,6 +278,8 @@ export function createViewportGestures(ctx: GestureContext): ViewportGestures {
         gesture = IDLE;
       } else if (g.kind === 'pose') {
         movePose(g, e);
+      } else if (g.kind === 'tilt') {
+        moveTilt(g, e.p);
       } else {
         movePart(g, e.p);
       }

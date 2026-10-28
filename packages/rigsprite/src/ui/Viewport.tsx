@@ -12,6 +12,7 @@ import { OrbitControls } from './OrbitControls';
 import { capturePointer } from './pointer';
 import { createFrameCache } from './viewportFrame';
 import { registerViewportCapture } from './viewportCapture';
+import { activeTiltHandle } from './tiltHandle';
 import { createViewportGestures, type GesturePointer } from './viewportGestures';
 import { cssView, deviceView, zoomAt, type ViewportSize } from './viewportView';
 
@@ -110,7 +111,7 @@ export function Viewport() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, overlay.width, overlay.height);
       ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
-      if (s.showRig) drawOverlay(ctx, s.project.rig, world, v, s.selectedBoneId);
+      if (s.showRig) drawOverlay(ctx, s.project.rig, world, v, s.selectedBoneId, activeTiltHandle(s, world, v));
     }
 
     // Still image for the suite's project list: draw now (same task), so the GL buffer still holds the frame.
