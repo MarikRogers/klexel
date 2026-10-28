@@ -1,4 +1,4 @@
-const CACHE = 'pixelart-v5';
+const CACHE = 'pixelart-v6';
 const STATIC = ['./', 'impressum.html', 'datenschutz.html', 'manifest.webmanifest', 'favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Beim Installieren alles Nötige vorab laden, inkl. der gehashten JS/CSS-Dateien aus index.html,
