@@ -172,6 +172,71 @@ describe('startShell: Wechsel zwischen Arten', () => {
   });
 });
 
+describe('startShell: Bereichswechsel', () => {
+  it('öffnet das zuletzt geänderte Projekt des anderen Bereichs und sichert vorher das offene', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await tick(2);
+    const rNew = await store.create('rigsprite', 'R neu', { kind: 'rigsprite', v: 2 });
+    await tick(2);
+    const rOld = await store.create('rigsprite', 'R alt', { kind: 'rigsprite', v: 3 });
+    // R neu wird danach geändert und ist damit das zuletzt geänderte Rigsprite-Projekt
+    await tick(2);
+    await store.save(rNew.id, { kind: 'rigsprite', v: 22 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    K.content = { kind: 'klexel', v: 9 };
+    await shell.switchArea('rigsprite');
+    expect(await store.load(k.id)).toEqual({ kind: 'klexel', v: 9 });
+    expect(R.opened.at(-1)).toEqual({ kind: 'rigsprite', v: 22 });
+    expect(await store.lastOpened()).toBe(rNew.id);
+    expect(container('rigsprite').hidden).toBe(false);
+    expect(container('klexel').hidden).toBe(true);
+    expect((await store.list()).map(m => m.id).sort()).toEqual([k.id, rNew.id, rOld.id].sort());
+
+    // zurück: das Klexel-Projekt
+    await shell.switchArea('klexel');
+    expect(K.opened.at(-1)).toEqual({ kind: 'klexel', v: 9 });
+    expect(await store.lastOpened()).toBe(k.id);
+  });
+
+  it('ohne Projekt der Art: legt ein leeres an und öffnet es', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    K.content = { kind: 'klexel', v: 4 };
+    await shell.switchArea('rigsprite');
+    const metas = await store.list();
+    expect(metas.map(m => m.kind).sort()).toEqual(['klexel', 'rigsprite']);
+    const r = metas.find(m => m.kind === 'rigsprite')!;
+    expect(await store.lastOpened()).toBe(r.id);
+    expect(R.opened).toEqual([{ kind: 'rigsprite', v: 0 }]);
+    expect(await store.load(k.id)).toEqual({ kind: 'klexel', v: 4 });
+    expect(container('rigsprite').hidden).toBe(false);
+  });
+
+  it('gleicher Bereich: nichts passiert', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    await shell.switchArea('klexel');
+    expect(K.opened).toHaveLength(1);
+    expect(await store.list()).toHaveLength(1);
+  });
+
+  it('Sichern scheitert: kein Wechsel', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    K.content = { kind: 'klexel', v: 5 };
+    const spy = vi.spyOn(WorkspaceStore.prototype, 'save').mockRejectedValueOnce(new Error('voll'));
+    await expect(shell.switchArea('rigsprite')).rejects.toThrow();
+    spy.mockRestore();
+    expect(R.d.load).not.toHaveBeenCalled();
+    expect(container('klexel').hidden).toBe(false);
+  });
+});
+
 async function startNewViaHost(host: AreaHost, content: unknown): Promise<void> {
   host.requestNewProject(undefined, content);
   await tick(100);

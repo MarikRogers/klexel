@@ -8,13 +8,15 @@ import type { AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, P
 import { WorkspaceStore, IdbBackend, migrateLegacy, DEFAULT_AUTOSAVE_DELAY_MS } from '@suite/shared';
 import { showToast } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
-import { nextUntitledName, afterRemoveError, isOpenable, NEW_PROJECT_SIZE } from './listModel';
+import { nextUntitledName, afterRemoveError, isOpenable, latestOfKind, NEW_PROJECT_SIZE } from './listModel';
 import { createProjectList } from './projectList';
 import { createFileActions } from './fileMenu';
 
 export interface Shell {
   /** Wechselt zum Projekt id: offene Bearbeitung absetzen, sichern, dann laden und öffnen. Läuft eingereiht, nie parallel. */
   switchProject(id: string): Promise<void>;
+  /** Wechselt zum Bereich kind: dessen zuletzt geändertes Projekt öffnen, sonst ein leeres anlegen (wie switchProject). */
+  switchArea(kind: string): Promise<void>;
 }
 
 const BLANK: NewProjectInit = NEW_PROJECT_SIZE;
@@ -288,40 +290,57 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     autosave.schedule(); // Vorschau erzeugen
   }
 
+  /** Wechsel zum Projekt id (nur innerhalb der Warteschlange): erst sichern, dann laden und öffnen. */
+  async function openProjectQueued(id: string): Promise<void> {
+    if (id === currentId) return;
+    const meta = (await store.list()).find(m => m.id === id);
+    const d = meta && byKind(meta.kind);
+    if (!meta || !d) {
+      showToast('Projekt ist in dieser Version nicht verfügbar', 3000);
+      throw new Error(`Projekt ${id} nicht verfügbar`);
+    }
+    try { await saveCurrent(); } catch {
+      showToast('Speichern fehlgeschlagen – Projekt nicht gewechselt', 3000);
+      throw new Error('Wechsel abgebrochen');
+    }
+    const payload = d.decode(await store.load(id));
+    if (payload === null) {
+      showToast('Projekt ist nicht lesbar', 3000);
+      throw new Error(`Projekt ${id} nicht lesbar`);
+    }
+    await openLoaded(id, meta.kind, payload, !!meta.thumbnail);
+  }
+
+  /** Neues Projekt der Art (nur innerhalb der Warteschlange): erst sichern, dann anlegen und öffnen. */
+  async function newProjectQueued(kind: string, init: NewProjectInit, content?: unknown): Promise<void> {
+    try { await saveCurrent(); } catch {
+      showToast('Speichern fehlgeschlagen – kein neues Projekt angelegt', 3000);
+      throw new Error('Neues Projekt abgebrochen');
+    }
+    // Vorlage (bei Klexel Palette und Farbe) nur aus einem Projekt derselben Art
+    const base = kind === currentKind ? currentHandle()?.snapshot() : undefined;
+    await createAndOpen(kind, init, base, content);
+  }
+
   function switchProject(id: string): Promise<void> {
-    return enqueue(async () => {
-      if (id === currentId) return;
-      const meta = (await store.list()).find(m => m.id === id);
-      const d = meta && byKind(meta.kind);
-      if (!meta || !d) {
-        showToast('Projekt ist in dieser Version nicht verfügbar', 3000);
-        throw new Error(`Projekt ${id} nicht verfügbar`);
-      }
-      try { await saveCurrent(); } catch {
-        showToast('Speichern fehlgeschlagen – Projekt nicht gewechselt', 3000);
-        throw new Error('Wechsel abgebrochen');
-      }
-      const payload = d.decode(await store.load(id));
-      if (payload === null) {
-        showToast('Projekt ist nicht lesbar', 3000);
-        throw new Error(`Projekt ${id} nicht lesbar`);
-      }
-      await openLoaded(id, meta.kind, payload, !!meta.thumbnail);
-    });
+    return enqueue(() => openProjectQueued(id));
   }
 
   // Neues Projekt (Klexels „Neu", Link „In Klexel bearbeiten", Rigsprites „Neu"/„Öffnen", Projektliste);
   // das aktuelle bleibt erhalten
   function newProject(kind: string, init: NewProjectInit, content?: unknown): Promise<void> {
+    return enqueue(() => newProjectQueued(kind, init, content)).catch(err => console.error(err));
+  }
+
+  // Bereichswechsel (Umschalter in der Projektliste): zuletzt geändertes Projekt der Art, sonst ein leeres;
+  // gleiche Warteschlange und Sicherung wie beim Öffnen/Anlegen
+  function switchArea(kind: string): Promise<void> {
     return enqueue(async () => {
-      try { await saveCurrent(); } catch {
-        showToast('Speichern fehlgeschlagen – kein neues Projekt angelegt', 3000);
-        throw new Error('Neues Projekt abgebrochen');
-      }
-      // Vorlage (bei Klexel Palette und Farbe) nur aus einem Projekt derselben Art
-      const base = kind === currentKind ? currentHandle()?.snapshot() : undefined;
-      await createAndOpen(kind, init, base, content);
-    }).catch(err => console.error(err));
+      if (kind === currentKind || !byKind(kind)) return;
+      const target = latestOfKind(await store.list(), kind);
+      if (target) await openProjectQueued(target.id);
+      else await newProjectQueued(kind, BLANK);
+    });
   }
 
   function removeProject(id: string): Promise<void> {
@@ -393,6 +412,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     duplicate: duplicateProject,
     remove: removeProject,
     create: (kind, width, height) => newProject(kind, { width, height }),
+    switchArea,
     kinds: descriptors.map(d => ({ kind: d.kind, title: d.title, sized: !!d.newProjectSize })),
     exportAll: files.exportAll,
     exportOne: m => files.exportOne(m.id, m.name),
@@ -411,8 +431,10 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     const btn = document.createElement('button');
     btn.id = 'projectsBtn';
     btn.type = 'button';
-    btn.title = 'Projekte';
-    btn.setAttribute('aria-label', 'Projekte');
+    // Bei mehreren Bereichen sagt der Name, in welchem Bereich man gerade ist
+    const label = slots.size > 1 ? `Projekte – ${slot('klexel').d.title}` : 'Projekte';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
     btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h7l2 2h9v11H2z"/></svg>`;
     btn.onclick = () => openList();
     // Kopplung an Klexels Kopfleiste: setzt #brand in #top voraus (siehe klexel.ts); fehlt die Marke, gibt es keinen Knopf
@@ -428,5 +450,5 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushNow(); });
   window.addEventListener('pagehide', flushNow);
 
-  return { switchProject };
+  return { switchProject, switchArea };
 }

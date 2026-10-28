@@ -84,6 +84,21 @@ export function defaultNewKind(current: string | null, enabledKinds: readonly st
   return current !== null && enabledKinds.includes(current) ? current : enabledKinds[0];
 }
 
+/** Zuletzt geändertes Projekt der Art (Ziel des Bereichswechsels), sonst undefined. */
+export function latestOfKind(list: readonly ProjectMeta[], kind: string): ProjectMeta | undefined {
+  let best: ProjectMeta | undefined;
+  for (const m of list) if (m.kind === kind && (!best || m.updatedAt > best.updatedAt)) best = m;
+  return best;
+}
+
+/** Segmente des Bereichswechsels oben in der Projektliste; null bei nur einem Bereich (dann kein Umschalter). */
+export function areaSegments(
+  kinds: ReadonlyArray<{ kind: string; title: string }>, currentKind: string | null,
+): Array<{ kind: string; title: string; current: boolean }> | null {
+  if (kinds.length < 2) return null;
+  return kinds.map(k => ({ kind: k.kind, title: k.title, current: k.kind === currentKind }));
+}
+
 /** Artwahl im Dialog „Neues Projekt" nur bei mehr als einem Bereich. */
 export function showKindChoice(enabledKinds: readonly string[]): boolean {
   return enabledKinds.length > 1;

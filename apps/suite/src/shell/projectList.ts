@@ -1,6 +1,6 @@
 import type { ProjectMeta } from '@suite/shared';
 import { MAX_IMAGE_SIZE } from '@suite/shared';
-import { NEW_PROJECT_SIZE, defaultNewKind, filterProjects, formatUpdated, kindBadge, parseSize, projectBadges, showKindChoice } from './listModel';
+import { NEW_PROJECT_SIZE, areaSegments, defaultNewKind, filterProjects, formatUpdated, kindBadge, parseSize, projectBadges, showKindChoice } from './listModel';
 
 export interface ProjectListDeps {
   list(): Promise<ProjectMeta[]>;
@@ -13,6 +13,8 @@ export interface ProjectListDeps {
   remove(id: string): Promise<void>;
   /** Neues Projekt der Art kind; Breite/Höhe nur bei Arten mit Größenwahl (sonst ignoriert) */
   create(kind: string, width: number, height: number): Promise<void>;
+  /** Zum Bereich kind wechseln: dessen zuletzt geändertes Projekt öffnen, sonst ein leeres anlegen */
+  switchArea(kind: string): Promise<void>;
   /** Bereiche dieses Builds in fester Reihenfolge: Art, Anzeigename, fragt „Neu" nach der Größe? */
   kinds: ReadonlyArray<{ kind: string; title: string; sized: boolean }>;
   /** Art des offenen Projekts (Vorwahl für „Neues Projekt") */
@@ -84,6 +86,7 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
         <h2>Projekte</h2>
         <button type="button" class="pl-close" aria-label="Schließen" title="Schließen">✕</button>
       </div>
+      <div class="pl-areas" role="radiogroup" aria-label="Bereich" hidden></div>
       <div class="pl-tools">
         <input type="search" class="pl-search" placeholder="Suchen …" aria-label="Projekte suchen" />
         <button type="button" class="pl-new primary">＋ Neues Projekt</button>
@@ -101,6 +104,7 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
   const search = q<HTMLInputElement>('.pl-search');
   const items = q<HTMLUListElement>('.pl-items');
   const empty = q<HTMLElement>('.pl-empty');
+  const areas = q<HTMLElement>('.pl-areas');
   let all: ProjectMeta[] = [];
   let busy = false;
   const kindIds = deps.kinds.map(k => k.kind);
@@ -118,7 +122,24 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
     }
   }
 
+  /** Umschalter „Klexel | Rigsprite": zeigt den Bereich des offenen Projekts; der andere wechselt dorthin. */
+  function renderAreas(): void {
+    const segs = areaSegments(deps.kinds, deps.currentKind());
+    areas.hidden = segs === null;
+    areas.replaceChildren(...(segs ?? []).map(s => {
+      const b = button(s.title, 'pl-area', () => {
+        if (!s.current) void act(async () => { await deps.switchArea(s.kind); dlg.close(); });
+      });
+      b.dataset.kind = s.kind;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(s.current));
+      b.title = s.current ? `${s.title} (geöffnet)` : `Zu ${s.title} wechseln`;
+      return b;
+    }));
+  }
+
   function render(): void {
+    renderAreas();
     const shown = filterProjects(all, search.value);
     items.replaceChildren();
     empty.hidden = shown.length > 0;
