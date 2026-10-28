@@ -9,8 +9,10 @@
   /* Kopplung an Klexels Kopfleiste (#top > .brand > span, siehe klexel.ts) */
   #top .brand span { display:none; }
 }
-/* Während eines Wechsels keine Eingaben auf der Zeichenfläche */
-body.shell-busy #app { pointer-events:none; }
+/* Während eines Wechsels keine Eingaben in den Bereichen */
+body.shell-busy [data-area] { pointer-events:none; }
+/* Nur der Bereich des offenen Projekts ist sichtbar (auch gegen display-Regeln der Bereiche, z. B. #app) */
+[data-area][hidden] { display:none !important; }
 
 #projectsDlg { width:min(96vw, 560px); max-width:none; height:min(88dvh, 720px); padding:0; overflow:hidden; }
 #projectsDlg::backdrop, .pl-ask::backdrop { background:rgba(0,0,0,.6); }
@@ -36,6 +38,13 @@ body.shell-busy #app { pointer-events:none; }
 .pl-meta { font-size:13px; opacity:.8; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .pl-badge { font-size:12px; padding:1px 6px; border-radius:6px; background:#33404f; }
 .pl-badge.off { background:#4f3333; }
+.pl-badge.kind { background:#3d3a52; }
+.pl-badge.kind-rigsprite { background:#2f4a3d; }
+.pl-kinds { display:flex; gap:0; margin:4px 0 8px; }
+.pl-kinds .pl-kind { flex:1; border-radius:0; border:2px solid #555; font-size:16px; }
+.pl-kinds .pl-kind:first-child { border-radius:10px 0 0 10px; }
+.pl-kinds .pl-kind:last-child { border-radius:0 10px 10px 0; }
+.pl-kinds .pl-kind[aria-checked="true"] { border-color:var(--accent, #4da3ff); }
 .pl-file { display:flex; gap:8px; flex-wrap:wrap; }
 .pl-file button { flex:1 1 140px; min-height:44px; font-size:14px; }
 .pl-actions { grid-area:actions; display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }

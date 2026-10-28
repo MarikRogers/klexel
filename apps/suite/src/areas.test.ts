@@ -27,12 +27,13 @@ describe('enabledAreas', () => {
 });
 
 describe('buildAreas', () => {
-  it('nur Rigsprite ist (noch) nicht baubar', () => {
-    expect(() => buildAreas('rigsprite')).toThrow(/Rigsprite ist noch nicht eingebunden/);
-  });
-  it('Standard und Klexel sind baubar', () => {
+  it('jede Auswahl ist baubar, auch nur Rigsprite', () => {
     expect(buildAreas(undefined)).toEqual(['klexel', 'rigsprite']);
     expect(buildAreas('klexel')).toEqual(['klexel']);
+    expect(buildAreas('rigsprite')).toEqual(['rigsprite']);
+  });
+  it('unbekannte Namen bleiben ein klarer Fehler', () => {
+    expect(() => buildAreas('klexel,foo')).toThrow(/Unbekannter Bereich „foo"/);
   });
 });
 
@@ -55,11 +56,21 @@ describe('Bereichs-Beschreibungen (Test-Build: alle Bereiche)', () => {
     expect(AREAS).toEqual(['klexel', 'rigsprite']);
   });
 
-  it('Klexel ist beschrieben, Rigsprite (noch) nicht', async () => {
+  it('Klexel und Rigsprite sind beschrieben (Klexel zuerst)', async () => {
     const ds = await loadDescriptors();
-    expect(ds.map(d => d.kind)).toEqual(['klexel']);
-    expect(await descriptorFor('rigsprite')).toBeUndefined();
+    expect(ds.map(d => d.kind)).toEqual(['klexel', 'rigsprite']);
+    expect((await descriptorFor('rigsprite'))?.title).toBe('Rigsprite');
     expect(await descriptorFor('foo')).toBeUndefined();
+  });
+
+  it('Rigsprite: blank lesbar, decode(Unlesbares) = null, changeKey', async () => {
+    const d = (await descriptorFor('rigsprite'))!;
+    const p = d.blank({ width: 3, height: 2 });
+    expect(d.decode(p)).toEqual(p);
+    expect(d.decode(JSON.parse(JSON.stringify(p)))).toEqual(p);
+    for (const raw of [null, 7, 'x', {}, { version: 1 }]) expect(d.decode(raw)).toBeNull();
+    expect(d.changeKey(p)).toBe(d.changeKey(d.blank()));
+    expect(d.changeKey(p)).not.toBe(d.changeKey({ ...(p as object), name: 'anders' }));
   });
 
   it('Klexel: blank ist lesbar und hat die gewünschte Größe samt Bildpixeln', async () => {

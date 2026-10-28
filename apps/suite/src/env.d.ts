@@ -6,7 +6,7 @@ declare global {
   const __AREAS__: ProjectKind[];
   /** Ist Klexel enthalten? Fester Wert beim Bauen, damit abgeschaltete Zweige samt Import entfallen. */
   const __AREA_KLEXEL__: boolean;
-  /** Ist Rigsprite enthalten? (noch nicht eingebunden) */
+  /** Ist Rigsprite enthalten? */
   const __AREA_RIGSPRITE__: boolean;
 
   interface ImportMetaEnv {

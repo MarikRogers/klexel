@@ -5,7 +5,7 @@ import type { AreaDescriptor, ProjectKind } from '@suite/shared';
 
 export { enabledAreas } from './areaNames';
 
-/** Beim Bauen gewählte Bereiche (auch solche, die noch nicht eingebunden sind). */
+/** Beim Bauen gewählte Bereiche. */
 export const AREAS: readonly ProjectKind[] = __AREAS__;
 
 let loaded: Promise<AreaDescriptor<unknown>[]> | undefined;
@@ -19,8 +19,8 @@ export function loadDescriptors(): Promise<AreaDescriptor<unknown>[]> {
       out.push(m.klexelDescriptor as unknown as AreaDescriptor<unknown>);
     }
     if (__AREA_RIGSPRITE__) {
-      // Platzhalter: Rigsprite ist noch nicht eingebunden (folgt mit Task 10). Bis dahin gibt es keine
-      // Beschreibung; Rigsprite-Projekte bleiben in der Liste erhalten und sind als „nicht verfügbar" gekennzeichnet.
+      const m = await import('@suite/rigsprite');
+      out.push(m.rigspriteDescriptor as unknown as AreaDescriptor<unknown>);
     }
     return out;
   })();

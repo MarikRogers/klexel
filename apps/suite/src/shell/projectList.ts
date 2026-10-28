@@ -1,5 +1,5 @@
 import type { ProjectMeta } from '@suite/shared';
-import { filterProjects, formatUpdated, parseSize, projectBadges } from './listModel';
+import { defaultNewKind, filterProjects, formatUpdated, kindBadge, parseSize, projectBadges, showKindChoice } from './listModel';
 
 export interface ProjectListDeps {
   list(): Promise<ProjectMeta[]>;
@@ -10,7 +10,12 @@ export interface ProjectListDeps {
   rename(id: string, name: string): Promise<void>;
   duplicate(id: string): Promise<void>;
   remove(id: string): Promise<void>;
-  create(width: number, height: number): Promise<void>;
+  /** Neues Projekt der Art kind; Breite/Höhe nur bei Arten mit Größenwahl (sonst ignoriert) */
+  create(kind: string, width: number, height: number): Promise<void>;
+  /** Bereiche dieses Builds in fester Reihenfolge: Art, Anzeigename, fragt „Neu" nach der Größe? */
+  kinds: ReadonlyArray<{ kind: string; title: string; sized: boolean }>;
+  /** Art des offenen Projekts (Vorwahl für „Neues Projekt") */
+  currentKind(): string | null;
   exportAll(): Promise<void>;
   exportOne(meta: ProjectMeta): Promise<void>;
   importFile(file: File): Promise<void>;
@@ -97,6 +102,8 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
   const empty = q<HTMLElement>('.pl-empty');
   let all: ProjectMeta[] = [];
   let busy = false;
+  const kindIds = deps.kinds.map(k => k.kind);
+  const titles = Object.fromEntries(deps.kinds.map(k => [k.kind, k.title]));
 
   // Aktionen nacheinander; währenddessen sind die Schaltflächen gesperrt
   async function act(fn: () => Promise<void>): Promise<void> {
@@ -131,7 +138,9 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
       const name = el('div', 'pl-name', m.name);
       name.title = m.name;
       const meta = el('div', 'pl-meta', formatUpdated(m.updatedAt, now));
-      for (const b of projectBadges(m, cur, usable)) meta.append(el('span', b.off ? 'pl-badge off' : 'pl-badge', b.text));
+      for (const b of projectBadges(m, cur, usable, kindBadge(m, kindIds, usable, titles))) {
+        meta.append(el('span', 'pl-badge' + (b.off ? ' off' : '') + (b.kind ? ` kind kind-${m.kind}` : ''), b.text));
+      }
       info.append(name, meta);
       const actions = el('div', 'pl-actions');
       const openBtn = button('Öffnen', 'primary', () => void act(async () => { await deps.open(m.id); dlg.close(); }));
@@ -191,13 +200,42 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
     };
     const w = mk('Breite'), h = mk('Höhe');
     const hint = el('p', 'pl-hint', '1 bis 128 Pixel');
-    const valid = () => parseSize(w.input.value) !== null && parseSize(h.input.value) !== null;
+    let kind = defaultNewKind(deps.currentKind(), kindIds) ?? '';
+    const sized = () => deps.kinds.find(k => k.kind === kind)?.sized ?? false;
+    const sizeFields = [w.label, h.label, hint];
+    const syncSize = () => { for (const e of sizeFields) e.hidden = !sized(); };
+    const body: HTMLElement[] = [];
+    if (showKindChoice(kindIds)) {
+      // Art als Umschalter (Segmente), vorgewählt die Art des offenen Projekts
+      const group = el('div', 'pl-kinds');
+      group.setAttribute('role', 'radiogroup');
+      group.setAttribute('aria-label', 'Art');
+      for (const k of deps.kinds) {
+        const b = el('button', 'pl-kind', k.title);
+        b.type = 'button';
+        b.dataset.kind = k.kind;
+        b.setAttribute('role', 'radio');
+        const sync = () => b.setAttribute('aria-checked', String(k.kind === kind));
+        b.onclick = () => {
+          kind = k.kind;
+          for (const x of group.querySelectorAll<HTMLButtonElement>('.pl-kind')) x.setAttribute('aria-checked', String(x.dataset.kind === kind));
+          syncSize();
+        };
+        sync();
+        group.append(b);
+      }
+      body.push(group);
+    }
+    body.push(...sizeFields);
+    syncSize();
+    const valid = () => !sized() || (parseSize(w.input.value) !== null && parseSize(h.input.value) !== null);
     const ok = await ask({
-      title: 'Neues Projekt', body: [w.label, h.label, hint], ok: 'Anlegen',
+      title: 'Neues Projekt', body, ok: 'Anlegen',
       validate: () => { const v = valid(); hint.classList.toggle('error', !v); return v; },
     });
     if (!ok || !valid()) return;
-    await act(async () => { await deps.create(parseSize(w.input.value)!, parseSize(h.input.value)!); dlg.close(); });
+    const [width, height] = sized() ? [parseSize(w.input.value)!, parseSize(h.input.value)!] : [32, 32];
+    await act(async () => { await deps.create(kind, width, height); dlg.close(); });
   }
 
   q<HTMLButtonElement>('.pl-close').onclick = () => dlg.close();

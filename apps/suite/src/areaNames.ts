@@ -3,9 +3,6 @@ import type { ProjectKind } from '@suite/shared';
 
 export const ALL_AREAS: readonly ProjectKind[] = ['klexel', 'rigsprite'];
 
-/** Bereiche, die schon eingebunden sind; Rigsprite folgt (bis dahin ist ein Build nur mit Rigsprite nicht möglich). */
-export const INTEGRATED_AREAS: readonly ProjectKind[] = ['klexel'];
-
 /**
  * Liest VITE_AREAS: kommagetrennt, ohne Groß-/Kleinschreibung, Leerzeichen egal, Doppelte entfallen.
  * Nicht gesetzt → alle Bereiche. Leer oder unbekannter Name → Fehler.
@@ -26,13 +23,9 @@ export function enabledAreas(env: string | undefined): ProjectKind[] {
   return out;
 }
 
-/** Prüft beim Bauen, dass mindestens ein eingebundener Bereich enthalten ist; liefert die Auswahl. */
+/** Bereichs-Auswahl beim Bauen; unbekannte Namen oder leere Angabe brechen den Build mit klarer Meldung ab. */
 export function buildAreas(env: string | undefined): ProjectKind[] {
-  const areas = enabledAreas(env);
-  if (!areas.some(a => INTEGRATED_AREAS.includes(a))) {
-    throw new Error('Rigsprite ist noch nicht eingebunden: ein Build nur mit Rigsprite ist noch nicht möglich (VITE_AREAS enthält klexel nicht).');
-  }
-  return areas;
+  return enabledAreas(env);
 }
 
 /** Name der App je Bereichs-Auswahl: nur Rigsprite → „RigSprite", sonst (Klexel oder beide) „Klexel". */

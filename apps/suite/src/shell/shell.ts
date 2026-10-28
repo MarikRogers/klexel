@@ -1,6 +1,8 @@
-// Hülle (nur Browser): Workspace öffnen, Bestand übernehmen, den Bereich einhängen, Projekte wechseln und automatisch sichern.
+// Hülle (nur Browser): Workspace öffnen, Bestand übernehmen, Bereiche einhängen, Projekte wechseln und automatisch sichern.
 // Alles Bereichs-Spezifische (leere Projekte, Lesbarkeit, Änderungserkennung, Alt-Stand, Einhängen) kommt über die
 // Bereichs-Beschreibungen (AreaDescriptor); die Hülle importiert kein Bereichs-Paket.
+// Jeder Bereich wird beim ersten Projekt seiner Art in einen eigenen Container eingehängt (Klexel: #app, weitere:
+// #area-<art> daneben) und bleibt danach eingehängt; sichtbar und aktiv ist nur der Bereich des offenen Projekts.
 import './shell.css';
 import type { AreaDescriptor, AreaHandle, AreaHost, NewProjectInit, ProjectMeta } from '@suite/shared';
 import { WorkspaceStore, IdbBackend, migrateLegacy } from '@suite/shared';
@@ -17,22 +19,46 @@ export interface Shell {
 
 const BLANK: NewProjectInit = { width: 32, height: 32 };
 
+/** Ein Bereich dieses Builds: Beschreibung, Container und (nach dem ersten Öffnen) der eingehängte Editor. */
+interface Slot {
+  d: AreaDescriptor<unknown>;
+  el: HTMLElement;
+  handle?: AreaHandle<unknown>;
+  mounting?: Promise<AreaHandle<unknown>>;
+}
+
 /**
- * Startet die Hülle mit den Bereichen dieses Builds. Vorerst wird genau ein Bereich eingehängt (der erste);
- * Projekte anderer Arten bleiben erhalten und sind in der Liste als „nicht verfügbar" gekennzeichnet.
+ * Startet die Hülle mit den Bereichen dieses Builds (Reihenfolge = Vorrang; der erste ist die Vorgabe für ein
+ * leeres Workspace). Projekte von Arten ohne Bereich bleiben erhalten und sind in der Liste „nicht verfügbar".
+ * app ist der Container von Klexel (seine Bedienelemente suchen #app/#bottom); weitere Bereiche bekommen Geschwister.
  */
 export async function startShell(app: HTMLElement, descriptors: readonly AreaDescriptor<unknown>[]): Promise<Shell> {
-  const area = descriptors[0];
-  if (!area) throw new Error('Kein Bereich in diesem Build enthalten');
+  const first = descriptors[0];
+  if (!first) throw new Error('Kein Bereich in diesem Build enthalten');
+  const kinds = descriptors.map(d => d.kind);
   const byKind = (kind: string) => descriptors.find(d => d.kind === kind);
-  const canOpen = (m: ProjectMeta) => isOpenable(m, [area.kind]);
-  // Editor schon laden, während der Workspace gelesen wird (eigener Chunk)
-  const areaModule = area.load();
-  areaModule.catch(() => undefined); // Fehler erst beim Einhängen melden
+  const canOpen = (m: ProjectMeta) => isOpenable(m, kinds);
+
+  const slots = new Map<string, Slot>();
+  for (const d of descriptors) {
+    let el = app;
+    if (d.kind !== 'klexel') {
+      el = document.createElement('div');
+      el.id = `area-${d.kind}`;
+      app.after(el);
+    }
+    el.dataset.area = d.kind;
+    el.hidden = true;
+    slots.set(d.kind, { d, el });
+  }
+  const slot = (kind: string) => slots.get(kind)!;
+  // Editor des ersten Bereichs schon laden, während der Workspace gelesen wird (eigener Chunk; nur laden)
+  first.load().catch(() => undefined); // Fehler erst beim Einhängen melden
 
   const kv = new IdbBackend();
   const store = new WorkspaceStore(kv);
 
+  // Alt-Stände nur der Bereiche dieses Builds (ohne Klexel keine Klexel-Übernahme)
   for (const d of descriptors) {
     if (!d.readLegacy) continue;
     try {
@@ -44,21 +70,23 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
 
   // Erst den Stand laden, dann einhängen, dann öffnen (der Link-Dialog prüft beim Einhängen)
   let currentId: string | null = null;
-  let initial: { id: string; payload: unknown; hasThumbnail: boolean } | null = null;
+  let currentKind: string | null = null;
+  let initial: { id: string; kind: string; payload: unknown; hasThumbnail: boolean } | null = null;
   try {
     const last = await store.lastOpened();
     const metas = (await store.list()).filter(canOpen);
-    // Zuletzt geöffnetes zuerst, sonst das zuletzt geänderte; Unlesbares wird übersprungen
+    // Zuletzt geöffnetes zuerst (dessen Bereich wird zuerst eingehängt), sonst das zuletzt geänderte;
+    // Unlesbares wird übersprungen
     const order = [...metas.filter(m => m.id === last), ...metas.filter(m => m.id !== last)];
     for (const m of order) {
-      const p = await store.load(m.id);
-      if (area.decode(p) !== null) { initial = { id: m.id, payload: p, hasThumbnail: !!m.thumbnail }; break; }
+      const payload = byKind(m.kind)!.decode(await store.load(m.id));
+      if (payload !== null) { initial = { id: m.id, kind: m.kind, payload, hasThumbnail: !!m.thumbnail }; break; }
       console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`);
     }
     if (!initial) {
-      const payload = area.blank(BLANK);
-      const meta = await store.create(area.kind, nextUntitledName(metas.map(m => m.name)), payload);
-      initial = { id: meta.id, payload, hasThumbnail: false };
+      const payload = first.blank(BLANK);
+      const meta = await store.create(first.kind, nextUntitledName(metas.map(m => m.name)), payload);
+      initial = { id: meta.id, kind: first.kind, payload, hasThumbnail: false };
     }
   } catch (err) {
     // Ohne Speicher trotzdem bedienbar bleiben (Änderungen gehen dann beim Schließen verloren)
@@ -70,21 +98,24 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
   // Zuletzt gesicherter (oder geöffneter) Stand des offenen Projekts
   let saved: { id: string; key: string } | null = null;
   let list: ReturnType<typeof createProjectList> | undefined;
-  let handle!: AreaHandle<unknown>;
+  const current = (): Slot | undefined => (currentKind === null ? undefined : slots.get(currentKind));
+  const currentHandle = () => current()?.handle;
+
   const autosave = createAutosave({
     // Klexel meldet Änderungen bereits entprellt (500 ms); hier nur kurz bündeln, damit das Fenster bis zum
     // Schreiben klein bleibt (beim Neuladen/Schließen bricht der Browser offene IndexedDB-Aufträge ab)
     delayMs: 50,
     save: async () => {
       const id = currentId;
-      if (!id) return;
+      const s = current();
+      if (!id || !s?.handle) return;
       // flush() ruft vorher der Auslöser auf (Klexel meldet onChange erst nach abgeschlossener Bearbeitung)
-      const payload = handle.snapshot();
-      // Klexel meldet beim Absetzen (flush) immer eine Änderung; ohne echte Änderung nicht schreiben,
+      const payload = s.handle.snapshot();
+      // Beim Absetzen (flush) melden die Bereiche immer eine Änderung; ohne echte Änderung nicht schreiben,
       // sonst springt das Datum schon beim bloßen Öffnen und Wechseln nach vorn
-      const key = area.changeKey(payload);
+      const key = s.d.changeKey(payload);
       if (saved?.id === id && saved.key === key) return;
-      const thumbnail = handle.thumbnail();
+      const thumbnail = s.handle.thumbnail();
       await store.save(id, payload, thumbnail ? { thumbnail } : undefined);
       saved = { id, key };
       list?.refresh();
@@ -94,26 +125,78 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       showToast('Speichern fehlgeschlagen', 3000);
     },
   });
-  const host: AreaHost = {
-    onChange: () => autosave.schedule(),
-    requestNewProject: init => { void newProject(init ?? BLANK); },
-    // Während eines Wechsels inaktiv: Klexel ignoriert dann Tastenkürzel (und merkt Größenänderungen nur vor)
-    isActive: () => !switching,
-  };
 
-  handle = (await areaModule).mount(app, host);
+  function hostFor(kind: string): AreaHost {
+    return {
+      // Meldungen eines verdeckten Bereichs betreffen nicht das offene Projekt
+      onChange: () => { if (currentKind === kind) autosave.schedule(); },
+      requestNewProject: (init, content) => { void newProject(kind, init ?? BLANK, content); },
+      // Nur der sichtbare Bereich und nicht während eines Wechsels (Klexel ignoriert dann Tastenkürzel und merkt
+      // Größenänderungen nur vor; Rigsprite ignoriert Tastenkürzel)
+      isActive: () => !switching && currentKind === kind,
+      openProjects: () => openList(),
+    };
+  }
 
-  /** Öffnet einen geladenen Stand; ohne Vorschau wird beim nächsten Sichern einmal geschrieben (erzeugt sie). */
-  function show(id: string, payload: unknown, hasThumbnail: boolean): void {
-    handle.open(payload);
+  /** Hängt den Bereich der Art ein (einmalig) und liefert seinen Handle; der Container ist danach sichtbar. */
+  function ensureMounted(kind: string): Promise<AreaHandle<unknown>> {
+    const s = slot(kind);
+    if (s.handle) return Promise.resolve(s.handle);
+    s.mounting ??= (async () => {
+      const area = await s.d.load();
+      // Sichtbar einhängen: Bereiche messen beim Einhängen ihre Fläche
+      s.el.hidden = false;
+      const h = area.mount(s.el, hostFor(kind));
+      s.handle = h;
+      if (kind === 'klexel') attachProjectsButton();
+      return h;
+    })();
+    s.mounting.catch(() => { s.mounting = undefined; s.el.hidden = true; });
+    return s.mounting;
+  }
+
+  /** Zeigt nur den Bereich der Art; die anderen werden verdeckt und inaktiv. */
+  function reveal(kind: string): void {
+    for (const [k, s] of slots) {
+      if (k === kind) continue;
+      s.handle?.setActive(false);
+      s.el.hidden = true;
+    }
+    slot(kind).el.hidden = false;
+  }
+
+  /**
+   * Öffnet einen geprüften Stand im Bereich seiner Art; ohne Vorschau wird beim nächsten Sichern einmal geschrieben
+   * (erzeugt sie). Scheitert das Laden des Bereichs, bleibt das bisherige Projekt offen.
+   */
+  async function show(id: string, kind: string, payload: unknown, hasThumbnail: boolean): Promise<void> {
+    const prev = { id: currentId, kind: currentKind };
+    // Bis das Projekt offen ist, sichert der Autosave nichts (sonst landete ein fremder Stand unter der alten ID)
+    currentId = null;
+    currentKind = kind;
+    let h: AreaHandle<unknown>;
+    try { h = await ensureMounted(kind); } catch (err) {
+      currentId = prev.id;
+      currentKind = prev.kind;
+      showToast(`${slot(kind).d.title} konnte nicht geladen werden`, 4000);
+      throw err;
+    }
+    reveal(kind);
+    h.open(payload);
     currentId = id;
-    saved = hasThumbnail ? { id, key: area.changeKey(handle.snapshot()) } : null;
+    saved = hasThumbnail ? { id, key: slot(kind).d.changeKey(h.snapshot()) } : null;
   }
 
   if (initial) {
-    show(initial.id, initial.payload, initial.hasThumbnail);
+    await show(initial.id, initial.kind, initial.payload, initial.hasThumbnail);
     void store.setLastOpened(initial.id).catch(err => console.error(err));
+  } else {
+    // Ohne Speicher: den ersten Bereich leer zeigen
+    currentKind = first.kind;
+    await ensureMounted(first.kind);
+    reveal(first.kind);
   }
+  currentHandle()?.setActive(true);
 
   // Eine Warteschlange für alles, was das offene Projekt austauscht oder löscht
   let queue: Promise<unknown> = Promise.resolve();
@@ -124,7 +207,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       try { return await fn(); } finally {
         switching = false;
         document.body.classList.remove('shell-busy');
-        handle.setActive(true); // vorgemerkte Größenänderung nachholen
+        currentHandle()?.setActive(true); // vorgemerkte Größenänderung nachholen
       }
     });
     queue = run.catch(() => undefined);
@@ -133,48 +216,61 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
 
   /** Offene Bearbeitung absetzen und sichern; wirft, wenn das Sichern scheitert (dann nicht wechseln). */
   async function saveCurrent(): Promise<void> {
-    handle.flush();
+    currentHandle()?.flush();
     await autosave.flush();
   }
 
-  async function openLoaded(id: string, payload: unknown, hasThumbnail?: boolean): Promise<void> {
+  async function openLoaded(id: string, kind: string, payload: unknown, hasThumbnail?: boolean): Promise<void> {
     if (hasThumbnail === undefined) hasThumbnail = !!(await store.list()).find(m => m.id === id)?.thumbnail;
-    show(id, payload, hasThumbnail);
+    await show(id, kind, payload, hasThumbnail);
     await store.setLastOpened(id);
   }
 
-  async function createAndOpen(init: NewProjectInit, base?: unknown): Promise<void> {
-    const payload = area.blank(init, base);
+  /** Legt ein Projekt der Art an (mit content, falls lesbar, sonst leer aus init/base) und öffnet es. */
+  async function createAndOpen(kind: string, init: NewProjectInit, base?: unknown, content?: unknown): Promise<void> {
+    const d = byKind(kind);
+    if (!d) throw new Error(`Bereich ${kind} fehlt in diesem Build`);
+    const given = content === undefined ? null : d.decode(content);
+    const payload = given ?? d.blank(init, base);
     const names = (await store.list()).map(m => m.name);
-    const meta = await store.create(area.kind, nextUntitledName(names), payload);
-    await openLoaded(meta.id, payload, false);
+    const meta = await store.create(d.kind, nextUntitledName(names), payload);
+    await openLoaded(meta.id, kind, payload, false);
     autosave.schedule(); // Vorschau erzeugen
   }
 
   function switchProject(id: string): Promise<void> {
     return enqueue(async () => {
       if (id === currentId) return;
+      const meta = (await store.list()).find(m => m.id === id);
+      const d = meta && byKind(meta.kind);
+      if (!meta || !d) {
+        showToast('Projekt ist in dieser Version nicht verfügbar', 3000);
+        throw new Error(`Projekt ${id} nicht verfügbar`);
+      }
       try { await saveCurrent(); } catch {
         showToast('Speichern fehlgeschlagen – Projekt nicht gewechselt', 3000);
         throw new Error('Wechsel abgebrochen');
       }
-      const payload = await store.load(id);
-      if (area.decode(payload) === null) {
+      const payload = d.decode(await store.load(id));
+      if (payload === null) {
         showToast('Projekt ist nicht lesbar', 3000);
         throw new Error(`Projekt ${id} nicht lesbar`);
       }
-      await openLoaded(id, payload);
+      await openLoaded(id, meta.kind, payload, !!meta.thumbnail);
     });
   }
 
-  // Neues Projekt (Klexels „Neu", Link „In Klexel bearbeiten", Projektliste); das aktuelle bleibt erhalten
-  function newProject(init: NewProjectInit): Promise<void> {
+  // Neues Projekt (Klexels „Neu", Link „In Klexel bearbeiten", Rigsprites „Neu"/„Öffnen", Projektliste);
+  // das aktuelle bleibt erhalten
+  function newProject(kind: string, init: NewProjectInit, content?: unknown): Promise<void> {
     return enqueue(async () => {
       try { await saveCurrent(); } catch {
         showToast('Speichern fehlgeschlagen – kein neues Projekt angelegt', 3000);
         throw new Error('Neues Projekt abgebrochen');
       }
-      await createAndOpen(init, handle.snapshot());
+      // Vorlage (bei Klexel Palette und Farbe) nur aus einem Projekt derselben Art
+      const base = kind === currentKind ? currentHandle()?.snapshot() : undefined;
+      await createAndOpen(kind, init, base, content);
     }).catch(err => console.error(err));
   }
 
@@ -182,7 +278,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     return enqueue(async () => {
       if (id !== currentId) { await store.remove(id); return; }
       // Das offene Projekt: nichts mehr dafür speichern, dann ein anderes öffnen oder ein leeres anlegen
-      const base = handle.snapshot();
+      const base = { kind: currentKind ?? first.kind, payload: currentHandle()?.snapshot() };
       currentId = null;
       autosave.cancel();
       try {
@@ -195,6 +291,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
         if (afterRemoveError(id, after) === 'restore') {
           // Projekt existiert noch: weiter bearbeiten und die verworfene Änderung erneut vormerken
           currentId = id;
+          currentKind = base.kind;
           autosave.schedule();
           showToast('Löschen fehlgeschlagen – das Projekt bleibt erhalten', 3000);
         } else {
@@ -203,6 +300,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
             // Letzter Ausweg: geöffnet lassen; Sichern auf die gelöschte ID ist ein No-op
             console.error(err2);
             currentId = id;
+            currentKind = base.kind;
             showToast('Kein anderes Projekt konnte geöffnet werden', 4000);
           }
         }
@@ -211,13 +309,13 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     });
   }
 
-  /** Nächstes lesbares Projekt des eingehängten Bereichs öffnen, sonst ein leeres anlegen. */
-  async function openFallback(base: unknown): Promise<void> {
+  /** Nächstes lesbares Projekt (einer Art dieses Builds) öffnen, sonst ein leeres der bisherigen Art anlegen. */
+  async function openFallback(base: { kind: string; payload: unknown }): Promise<void> {
     for (const m of (await store.list()).filter(canOpen)) {
-      const payload = await store.load(m.id);
-      if (area.decode(payload) !== null) { await openLoaded(m.id, payload, !!m.thumbnail); return; }
+      const payload = byKind(m.kind)!.decode(await store.load(m.id));
+      if (payload !== null) { await openLoaded(m.id, m.kind, payload, !!m.thumbnail); return; }
     }
-    await createAndOpen(BLANK, base);
+    await createAndOpen(base.kind, BLANK, base.payload);
   }
 
   function duplicateProject(id: string): Promise<void> {
@@ -238,32 +336,43 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
   list = createProjectList({
     list: () => store.list(),
     currentId: () => currentId,
+    currentKind: () => currentKind,
     canOpen,
     open: switchProject,
     rename: (id, name) => store.rename(id, name),
     duplicate: duplicateProject,
     remove: removeProject,
-    create: (width, height) => newProject({ width, height }),
+    create: (kind, width, height) => newProject(kind, { width, height }),
+    kinds: descriptors.map(d => ({ kind: d.kind, title: d.title, sized: !!d.newProjectSize })),
     exportAll: files.exportAll,
     exportOne: m => files.exportOne(m.id, m.name),
     importFile: async f => { await files.importFile(f); },
   });
 
-  // Knopf „Projekte" neben der Marke in Klexels Kopfleiste
-  const btn = document.createElement('button');
-  btn.id = 'projectsBtn';
-  btn.type = 'button';
-  btn.title = 'Projekte';
-  btn.setAttribute('aria-label', 'Projekte');
-  btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h7l2 2h9v11H2z"/></svg>`;
-  btn.onclick = () => { handle.flush(); list?.open(); };
-  // Kopplung an Klexels Kopfleiste: setzt #brand in #top voraus (siehe klexel.ts); fehlt die Marke, gibt es keinen Knopf
-  document.getElementById('brand')?.after(btn);
+  /** Projektliste zeigen (Knopf in Klexels Kopfleiste, Rigsprites „Projekte" über host.openProjects) */
+  function openList(): void {
+    currentHandle()?.flush();
+    list?.open();
+  }
+
+  // Knopf „Projekte" neben der Marke in Klexels Kopfleiste; erst nach dem Einhängen von Klexel vorhanden
+  function attachProjectsButton(): void {
+    if (document.getElementById('projectsBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'projectsBtn';
+    btn.type = 'button';
+    btn.title = 'Projekte';
+    btn.setAttribute('aria-label', 'Projekte');
+    btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h7l2 2h9v11H2z"/></svg>`;
+    btn.onclick = () => openList();
+    // Kopplung an Klexels Kopfleiste: setzt #brand in #top voraus (siehe klexel.ts); fehlt die Marke, gibt es keinen Knopf
+    document.getElementById('brand')?.after(btn);
+  }
 
   // Beim Verstecken/Schließen sofort sichern (Klexels eigener Listener meldet vorher onChange)
   const flushNow = () => {
     if (switching) return; // ein Wechsel sichert selbst
-    handle.flush();
+    currentHandle()?.flush();
     autosave.flush().catch(() => undefined);
   };
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushNow(); });

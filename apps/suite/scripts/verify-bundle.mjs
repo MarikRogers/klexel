@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MARKERS, appNameFor, cacheNameFor } from './bundleChecks.mjs';
+import { MARKERS, TRACES, appNameFor, cacheNameFor } from './bundleChecks.mjs';
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const expected = [...new Set(process.argv.slice(2).flatMap(a => a.split(',')).map(a => a.trim().toLowerCase()).filter(Boolean))];
@@ -37,31 +37,28 @@ const contents = [...files(dist)].map(p => ({ path: relative(dist, p), text: rea
 
 for (const [kind, marker] of Object.entries(MARKERS)) {
   const want = expected.includes(kind);
-  if (marker === null) {
-    console.warn(`! ${kind}: Marker noch nicht festgelegt – Prüfung übersprungen`);
-    continue;
-  }
   const hits = contents.filter(c => c.text.includes(marker)).map(c => c.path);
   if (want && !hits.length) fail(`${kind}: erwartet, aber Marker ${marker} fehlt im Bundle`);
   else if (!want && hits.length) fail(`${kind}: abgeschaltet, aber Marker ${marker} steckt im Bundle (${hits.join(', ')})`);
   else console.log(`✓ ${kind}: ${want ? `enthalten (${hits.join(', ')})` : 'nicht enthalten'}`);
+  if (want) continue;
+  for (const trace of TRACES[kind] ?? []) {
+    const found = contents.filter(c => c.text.includes(trace)).map(c => c.path);
+    if (found.length) fail(`${kind}: abgeschaltet, aber „${trace}" steckt im Bundle (${found.join(', ')})`);
+  }
 }
 
 const read = file => (existsSync(join(dist, file)) ? readFileSync(join(dist, file), 'utf8') : null);
-// Bereiche ohne Marker sind im Bundle nicht nachweisbar: der Build kann sie zusätzlich enthalten (z. B. Standard-Build
-// „klexel,rigsprite", solange Rigsprite keinen Marker hat). Name und Cache-Name dürfen zu jeder dieser Varianten passen.
-const unmarked = Object.keys(MARKERS).filter(k => MARKERS[k] === null && !expected.includes(k));
-const variants = unmarked.reduce((acc, k) => acc.flatMap(v => [v, [...v, k]]), [expected]);
-const names = [...new Set(variants.map(appNameFor))];
-const caches = [...new Set(variants.map(cacheNameFor))];
-const name = names.join('" oder „');
+// Name und Cache-Name genau zur erwarteten Auswahl
+const name = appNameFor(expected);
+const cache = cacheNameFor(expected);
 
 // Manifest-Name passend zur Auswahl
 const mfText = read('manifest.webmanifest');
 if (mfText === null) fail('manifest.webmanifest fehlt');
 else {
   const mf = JSON.parse(mfText);
-  if (!names.includes(mf.name) || mf.short_name !== mf.name) fail(`Manifest heißt „${mf.name}"/„${mf.short_name}", erwartet „${name}"`);
+  if (mf.name !== name || mf.short_name !== name) fail(`Manifest heißt „${mf.name}"/„${mf.short_name}", erwartet „${name}"`);
   else console.log(`✓ Manifest: ${mf.name}`);
 }
 
@@ -71,7 +68,7 @@ if (html === null) fail('index.html fehlt');
 else {
   const title = html.match(/<title>([^<]*)<\/title>/)?.[1];
   const apple = html.match(/<meta name="apple-mobile-web-app-title" content="([^"]*)"/)?.[1];
-  if (!names.includes(title) || apple !== title) fail(`index.html: Titel „${title}", apple-mobile-web-app-title „${apple}", erwartet „${name}"`);
+  if (title !== name || apple !== name) fail(`index.html: Titel „${title}", apple-mobile-web-app-title „${apple}", erwartet „${name}"`);
   else console.log(`✓ index.html: ${title}`);
 }
 
@@ -80,7 +77,7 @@ const sw = read('sw.js');
 if (sw === null) fail('sw.js fehlt');
 else {
   const got = sw.match(/const CACHE = '([^']*)';/)?.[1];
-  if (!caches.includes(got)) fail(`sw.js: Cache „${got}", erwartet „${caches.join('" oder „')}"`);
+  if (got !== cache) fail(`sw.js: Cache „${got}", erwartet „${cache}"`);
   else if (sw.includes('const BUILD_ASSETS = [];')) fail('sw.js: BUILD_ASSETS nicht eingesetzt');
   else console.log(`✓ sw.js: Cache ${got}`);
 }

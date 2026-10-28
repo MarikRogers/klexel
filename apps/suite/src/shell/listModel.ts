@@ -40,9 +40,12 @@ export function isOpenable(meta: ProjectMeta, kinds: readonly string[]): boolean
   return kinds.includes(meta.kind);
 }
 
-/** Kennzeichen eines Eintrags in der Projektliste („geöffnet", „nicht verfügbar"). */
-export function projectBadges(meta: ProjectMeta, currentId: string | null, usable: boolean): Array<{ text: string; off: boolean }> {
-  const out: Array<{ text: string; off: boolean }> = [];
+/** Kennzeichen eines Eintrags in der Projektliste (Art, „geöffnet", „nicht verfügbar"). kindLabel = Art zuerst. */
+export function projectBadges(
+  meta: ProjectMeta, currentId: string | null, usable: boolean, kindLabel?: string | null,
+): Array<{ text: string; off: boolean; kind?: true }> {
+  const out: Array<{ text: string; off: boolean; kind?: true }> = [];
+  if (kindLabel) out.push({ text: kindLabel, off: false, kind: true });
   if (meta.id === currentId) out.push({ text: 'geöffnet', off: false });
   if (!usable) out.push({ text: 'nicht verfügbar', off: true });
   return out;
@@ -55,4 +58,30 @@ export function projectBadges(meta: ProjectMeta, currentId: string | null, usabl
 export function afterRemoveError(removedId: string, listAfter: ProjectMeta[] | null): 'restore' | 'fallback' {
   if (listAfter === null) return 'restore';
   return listAfter.some(m => m.id === removedId) ? 'restore' : 'fallback';
+}
+
+/** Anzeigenamen der Projekt-Arten, auch für Arten ohne Bereich in diesem Build. */
+const KIND_TITLES: Record<string, string> = { klexel: 'Klexel', rigsprite: 'Rigsprite' };
+
+/** Anzeigename einer Art: aus der Bereichs-Beschreibung, sonst bekannt, sonst die Art selbst. */
+export function kindTitle(kind: string, titles: Readonly<Record<string, string>> = {}): string {
+  return titles[kind] ?? KIND_TITLES[kind] ?? kind;
+}
+
+/**
+ * Art-Kennzeichen eines Eintrags: nur, wenn der Build mehrere Bereiche hat (sonst wäre es überall gleich) oder
+ * das Projekt nicht geöffnet werden kann (dann sagt es, welcher Bereich fehlt).
+ */
+export function kindBadge(meta: ProjectMeta, enabledKinds: readonly string[], usable: boolean, titles: Readonly<Record<string, string>> = {}): string | null {
+  return enabledKinds.length > 1 || !usable ? kindTitle(meta.kind, titles) : null;
+}
+
+/** Vorgewählte Art für „Neues Projekt": die des offenen Projekts, sonst die erste des Builds. */
+export function defaultNewKind(current: string | null, enabledKinds: readonly string[]): string | undefined {
+  return current !== null && enabledKinds.includes(current) ? current : enabledKinds[0];
+}
+
+/** Artwahl im Dialog „Neues Projekt" nur bei mehr als einem Bereich. */
+export function showKindChoice(enabledKinds: readonly string[]): boolean {
+  return enabledKinds.length > 1;
 }

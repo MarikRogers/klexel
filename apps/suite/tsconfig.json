@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Rigsprite (über areas.ts → @suite/rigsprite → dynamischer Import des Bereichs) ist React mit JSX
+    "jsx": "react-jsx"
+  },
   "include": ["src", "../../packages/shared/src", "../../packages/klexel/src"]
 }
