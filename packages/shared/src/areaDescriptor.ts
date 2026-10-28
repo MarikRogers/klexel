@@ -41,6 +41,11 @@ export interface AreaDescriptor<P> {
    * Größe oder Anzahl die Grenzen dieser Art überschreiten. Fehlt bei Arten, die so nichts anlegen können.
    */
   fromFrames?(input: FramesDocInput): P;
+  /**
+   * Schreibt Verknüpfungen auf andere Projekte um (alte ID → neue ID), wenn eine Workspace-Datei geladen wird und
+   * alle Projekte neue IDs bekommen. Nicht enthaltene IDs bleiben; ohne Änderung darf derselbe Inhalt zurückkommen.
+   */
+  remapLinks?(payload: P, idMap: ReadonlyMap<string, string>): P;
 }
 
 /** Standard-Wartezeit des Autosaves der Hülle (Klexel meldet bereits entprellt, 500 ms). */

@@ -192,3 +192,28 @@ export function carryLinkedUpdate(q: Project, before: Project, after: Project): 
   }
   return out;
 }
+
+/**
+ * `p` with every link to a Klexel project rewritten through `idMap` (old id → new id): `images[*].source.projectId`
+ * and the keys of `linkedFrames`. Used when a workspace file is imported and all project ids change. Ids not in the
+ * map stay as they are; the same object if nothing maps. Does not mutate `p`.
+ */
+export function remapSourceIds(p: Project, idMap: ReadonlyMap<string, string>): Project {
+  let images = p.images;
+  for (const [key, img] of Object.entries(p.images)) {
+    const to = img.source ? idMap.get(img.source.projectId) : undefined;
+    if (to === undefined || to === img.source!.projectId) continue;
+    if (images === p.images) images = { ...p.images };
+    images[key] = { ...img, source: { ...img.source!, projectId: to } };
+  }
+  let linkedFrames = p.linkedFrames;
+  if (linkedFrames && Object.keys(linkedFrames).some((k) => { const to = idMap.get(k); return to !== undefined && to !== k; })) {
+    const next: Record<string, number[]> = {};
+    for (const [k, ids] of Object.entries(linkedFrames)) {
+      const to = idMap.get(k) ?? k;
+      next[to] = next[to] ? [...new Set([...next[to], ...ids])].sort((a, b) => a - b) : [...ids];
+    }
+    linkedFrames = next;
+  }
+  return images === p.images && linkedFrames === p.linkedFrames ? p : { ...p, images, ...(linkedFrames ? { linkedFrames } : {}) };
+}

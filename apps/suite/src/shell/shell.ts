@@ -474,6 +474,8 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     // Arten ohne Bereich in diesem Build werden unverändert übernommen (und sind dann „nicht verfügbar")
     isKnownKind: kind => byKind(kind) !== undefined,
     validatePayload: (kind, payload) => { const d = byKind(kind); return !d || d.decode(payload) !== null; },
+    // Beim Laden einer Workspace-Datei ändern sich alle IDs: Verknüpfungen zwischen den Projekten der Datei mitziehen
+    remapPayload: (kind, payload, idMap) => byKind(kind)?.remapLinks?.(payload as never, idMap) ?? payload,
   });
 
   list = createProjectList({

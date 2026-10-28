@@ -2,6 +2,7 @@
 import type { AreaDescriptor } from '@suite/shared';
 import { createProject, parseProjectData, type Project } from './core/project';
 import { projectChangeKey } from './changeKey';
+import { remapSourceIds } from './core/linkedSprites';
 import { AREA_MARKER } from './marker';
 
 /** Wartezeit der Hülle bis zum Sichern nach einer Änderung */
@@ -22,5 +23,6 @@ export const rigspriteDescriptor: AreaDescriptor<Project> & { marker: string } =
   // Rigsprite meldet jede Projektänderung sofort (auch Tastendruck in Feldern): Sichern gedrosselt, damit nicht
   // jede Änderung einen vollen Schreibvorgang (samt eingebetteter Bilder und Vorschau) auslöst
   autosaveDelayMs: RIGSPRITE_AUTOSAVE_DELAY_MS,
+  remapLinks: remapSourceIds,
   // Kein readLegacy: der alte Autosave des eigenständigen Rigsprite liegt auf einer anderen Adresse (Origin).
 };

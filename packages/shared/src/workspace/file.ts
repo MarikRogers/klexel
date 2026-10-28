@@ -1,10 +1,10 @@
 import type { ProjectKind, ProjectMeta } from './types';
-import type { WorkspaceStore } from './store';
+import { newProjectId, type WorkspaceStore } from './store';
 
 export interface WorkspaceFile {
   format: 'klexel-workspace';
   version: 1;
-  projects: Array<{ kind: string; name: string; updatedAt: number; thumbnail?: string; origin?: ProjectMeta['origin']; payload: unknown }>;
+  projects: Array<{ id?: string; kind: string; name: string; updatedAt: number; thumbnail?: string; origin?: ProjectMeta['origin']; payload: unknown }>;
 }
 
 export interface ImportResult {
@@ -96,7 +96,7 @@ export async function exportWorkspace(store: WorkspaceStore, ids?: string[]): Pr
   const metas = (await store.list()).filter(m => !ids || ids.includes(m.id));
   const projects: WorkspaceFile['projects'] = [];
   for (const m of metas) {
-    const p: WorkspaceFile['projects'][number] = { kind: m.kind, name: m.name, updatedAt: m.updatedAt, payload: await store.load(m.id) };
+    const p: WorkspaceFile['projects'][number] = { id: m.id, kind: m.kind, name: m.name, updatedAt: m.updatedAt, payload: await store.load(m.id) };
     if (m.thumbnail !== undefined) p.thumbnail = m.thumbnail;
     if (m.origin !== undefined) p.origin = m.origin;
     projects.push(p);
@@ -114,6 +114,7 @@ export async function importWorkspace(
   text: string,
   isKnownKind: (kind: string) => boolean,
   validatePayload?: (kind: string, payload: unknown) => boolean,
+  remapPayload?: (kind: string, payload: unknown, idMap: ReadonlyMap<string, string>) => unknown,
 ): Promise<ImportResult> {
   let data: unknown;
   try { data = JSON.parse(text, reviver); } catch { throw new Error('Die Datei ist keine gültige Workspace-Datei'); }
@@ -121,13 +122,23 @@ export async function importWorkspace(
     throw new Error('Die Datei ist keine gültige Workspace-Datei');
   }
   if (data.version > 1) throw new Error('Die Datei stammt von einer neueren Version');
-  const added: ProjectMeta[] = [];
   const rejected: ImportResult['rejected'] = [];
+  // Erster Durchgang: gültige Projekte und ihre neuen IDs; idMap (alte → neue ID) dient dem Umschreiben von Verknüpfungen
+  const idMap = new Map<string, string>();
+  const valid: Array<{ p: WorkspaceFile['projects'][number]; name: string; newId: string }> = [];
   for (const raw of data.projects as unknown[]) {
     const name = cleanName(isObj(raw) ? raw.name : undefined);
     const reason = check(raw, isKnownKind, validatePayload);
     if (reason) { rejected.push({ name, reason }); continue; }
     const p = raw as WorkspaceFile['projects'][number];
+    const newId = newProjectId();
+    // Doppelte alte ID in einer Datei: die erste gilt, die weiteren bekommen keinen Eintrag
+    if (typeof p.id === 'string' && p.id && !idMap.has(p.id)) idMap.set(p.id, newId);
+    valid.push({ p, name, newId });
+  }
+  // Zweiter Durchgang: Verknüpfungen umschreiben und speichern
+  const added: ProjectMeta[] = [];
+  for (const { p, name, newId } of valid) {
     const meta: Omit<ProjectMeta, 'id'> = {
       kind: p.kind as ProjectKind,
       name,
@@ -135,9 +146,10 @@ export async function importWorkspace(
     };
     if (typeof p.thumbnail === 'string' && p.thumbnail.length <= MAX_THUMB && THUMB_RE.test(p.thumbnail)) meta.thumbnail = p.thumbnail;
     if (isObj(p.origin) && typeof p.origin.rigProjectId === 'string' && typeof p.origin.animationId === 'string') {
-      meta.origin = { rigProjectId: p.origin.rigProjectId, animationId: p.origin.animationId };
+      meta.origin = { rigProjectId: idMap.get(p.origin.rigProjectId) ?? p.origin.rigProjectId, animationId: p.origin.animationId };
     }
-    added.push(await store.add(meta, p.payload));
+    const payload = remapPayload ? remapPayload(p.kind, p.payload, idMap) ?? p.payload : p.payload;
+    added.push(await store.add(meta, payload, newId));
   }
   return { added, rejected };
 }

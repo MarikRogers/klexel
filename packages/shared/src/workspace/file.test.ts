@@ -182,3 +182,95 @@ describe('Workspace-Datei: Robustheit', () => {
     expect(r.rejected).toHaveLength(1);
   });
 });
+
+describe('Workspace-Datei: Verknüpfungen beim Laden umschreiben', () => {
+  type Pl = { images?: Record<string, { source: { projectId: string } }>; n?: number; data?: Uint8Array };
+  // Stand-in für den Rigsprite-Descriptor: schreibt images[*].source.projectId um
+  const remap = (kind: string, payload: unknown, idMap: ReadonlyMap<string, string>): unknown => {
+    if (kind !== 'rigsprite') return payload;
+    const pl = payload as Pl;
+    const images: NonNullable<Pl['images']> = {};
+    for (const [k, im] of Object.entries(pl.images ?? {})) images[k] = { source: { projectId: idMap.get(im.source.projectId) ?? im.source.projectId } };
+    return { ...pl, images };
+  };
+  const src = async () => {
+    const a = mk();
+    const A = await a.create('klexel', 'A', { n: 1 });
+    const B = await a.create('rigsprite', 'B', { images: { x: { source: { projectId: A.id } }, y: { source: { projectId: 'fremd' } } }, data: new Uint8Array([7, 8]) });
+    return { a, A, B };
+  };
+
+  it('B verweist nach dem Import auf das neue A; fremde Verknüpfung und Typed Arrays bleiben', async () => {
+    const { a, A, B } = await src();
+    const dst = mk();
+    const r = await importWorkspace(dst, await text(await exportWorkspace(a)), known, undefined, remap);
+    expect(r.rejected).toEqual([]);
+    const list = await dst.list();
+    const nA = list.find(m => m.name === 'A')!, nB = list.find(m => m.name === 'B')!;
+    expect(nA.id).not.toBe(A.id);
+    expect(nB.id).not.toBe(B.id);
+    const pl = (await dst.load(nB.id)) as Pl;
+    expect(pl.images!.x.source.projectId).toBe(nA.id);
+    expect(pl.images!.y.source.projectId).toBe('fremd');
+    expect(pl.data).toEqual(new Uint8Array([7, 8]));
+  });
+
+  it('origin.rigProjectId wird umgeschrieben, unbekannte bleibt', async () => {
+    const a = mk();
+    const rig = await a.create('rigsprite', 'Rig', {});
+    const doc = await a.add({ kind: 'klexel', name: 'Doc', updatedAt: 1, origin: { rigProjectId: rig.id, animationId: 'an' } }, {});
+    await a.add({ kind: 'klexel', name: 'Doc2', updatedAt: 2, origin: { rigProjectId: 'weg', animationId: 'an' } }, {});
+    expect(doc.origin).toBeDefined();
+    const dst = mk();
+    await importWorkspace(dst, await text(await exportWorkspace(a)), known);
+    const list = await dst.list();
+    const nRig = list.find(m => m.name === 'Rig')!;
+    expect(list.find(m => m.name === 'Doc')!.origin).toEqual({ rigProjectId: nRig.id, animationId: 'an' });
+    expect(list.find(m => m.name === 'Doc2')!.origin).toEqual({ rigProjectId: 'weg', animationId: 'an' });
+  });
+
+  it('Datei ohne ids (ältere Ausgabe) lässt sich laden, ohne Umschreiben', async () => {
+    const { a, A } = await src();
+    const f = JSON.parse(await text(await exportWorkspace(a)));
+    for (const p of f.projects) delete p.id;
+    const dst = mk();
+    const r = await importWorkspace(dst, JSON.stringify(f), known, undefined, remap);
+    expect(r.added).toHaveLength(2);
+    const nB = (await dst.list()).find(m => m.name === 'B')!;
+    expect(((await dst.load(nB.id)) as Pl).images!.x.source.projectId).toBe(A.id);
+  });
+
+  it('doppelte ID: die erste gilt, kein Absturz', async () => {
+    const f = { format: 'klexel-workspace', version: 1, projects: [
+      { id: 'd', kind: 'klexel', name: 'Erste', updatedAt: 1, payload: {} },
+      { id: 'd', kind: 'klexel', name: 'Zweite', updatedAt: 2, payload: {} },
+      { id: 'r', kind: 'rigsprite', name: 'R', updatedAt: 3, payload: { images: { x: { source: { projectId: 'd' } } } } },
+    ] };
+    const dst = mk();
+    const r = await importWorkspace(dst, JSON.stringify(f), known, undefined, remap);
+    expect(r.added).toHaveLength(3);
+    const list = await dst.list();
+    const erste = list.find(m => m.name === 'Erste')!;
+    expect(new Set(list.map(m => m.id)).size).toBe(3);
+    expect(((await dst.load(list.find(m => m.name === 'R')!.id)) as Pl).images!.x.source.projectId).toBe(erste.id);
+  });
+
+  it('abgelehntes Projekt dazwischen stört nicht und steht nicht in der Zuordnung', async () => {
+    const f = { format: 'klexel-workspace', version: 1, projects: [
+      { id: 'a', kind: 'klexel', name: 'A', updatedAt: 1, payload: {} },
+      { id: 'kaputt', kind: 'klexel', name: 'Kaputt', updatedAt: 2, payload: { $typed: 'Uint8Array', b64: '!!' } },
+      { id: 'r', kind: 'rigsprite', name: 'R', updatedAt: 3, payload: { images: { x: { source: { projectId: 'a' } }, y: { source: { projectId: 'kaputt' } } } } },
+    ] };
+    const dst = mk();
+    const seen: ReadonlyMap<string, string>[] = [];
+    const r = await importWorkspace(dst, JSON.stringify(f), known, undefined, (k, p, m) => { seen.push(m); return remap(k, p, m); });
+    expect(r.rejected.map(x => x.name)).toEqual(['Kaputt']);
+    expect(r.added).toHaveLength(2);
+    expect(seen[0].has('kaputt')).toBe(false);
+    const list = await dst.list();
+    const nR = list.find(m => m.name === 'R')!;
+    const pl = (await dst.load(nR.id)) as Pl;
+    expect(pl.images!.x.source.projectId).toBe(list.find(m => m.name === 'A')!.id);
+    expect(pl.images!.y.source.projectId).toBe('kaputt');
+  });
+});

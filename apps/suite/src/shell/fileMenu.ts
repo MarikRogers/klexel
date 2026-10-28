@@ -16,6 +16,8 @@ export interface FileActionDeps {
   prepare(): Promise<void>;
   isKnownKind(kind: string): boolean;
   validatePayload(kind: string, payload: unknown): boolean;
+  /** Schreibt Verknüpfungen eines Inhalts auf die neuen IDs um (alte → neue ID); ohne Angabe bleibt der Inhalt unverändert. */
+  remapPayload?(kind: string, payload: unknown, idMap: ReadonlyMap<string, string>): unknown;
 }
 
 /** Dateiname ohne verbotene Zeichen (Windows/Unix), nie leer. */
@@ -66,6 +68,8 @@ export function createFileActions(deps: FileActionDeps): FileActions {
       await prepare();
       await saveBlob(await exportWorkspace(store), 'klexel-workspace.json', MIME);
     },
+    // Einzelnes Projekt: kein Gegenstück in der Datei, also keine Zuordnung alt → neu; Verknüpfungen zeigen weiter auf
+    // die ursprünglichen IDs (greifen, wenn die Datei in denselben Workspace zurückkommt, sonst „Quelle fehlt").
     async exportOne(id, name) {
       await prepare();
       await saveBlob(await exportWorkspace(store, [id]), `${sanitizeFileName(name)}.klexel.json`, MIME);
@@ -80,7 +84,7 @@ export function createFileActions(deps: FileActionDeps): FileActions {
       try { parsed = JSON.parse(text); } catch { parsed = undefined; }
       if (classifyProjectFile(parsed) === 'rigsprite-project') return addRigspriteProject(parsed as Record<string, unknown>);
       try {
-        const r = await importWorkspace(store, text, deps.isKnownKind, deps.validatePayload);
+        const r = await importWorkspace(store, text, deps.isKnownKind, deps.validatePayload, deps.remapPayload);
         const n = r.added.length;
         let msg = n === 1 ? '1 Projekt hinzugefügt' : `${n} Projekte hinzugefügt`;
         if (r.rejected.length) {

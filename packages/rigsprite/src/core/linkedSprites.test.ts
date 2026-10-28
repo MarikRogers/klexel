@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkFramesAsImages, refreshLinkedImages, type SourceFrame, type SourceResult } from './linkedSprites';
+import { linkFramesAsImages, refreshLinkedImages, remapSourceIds, type SourceFrame, type SourceResult } from './linkedSprites';
 import { createProject, type Project } from './project';
 
 const frame = (frameId: number, name: string, over: Partial<SourceFrame> = {}): SourceFrame => ({
@@ -216,5 +216,36 @@ describe('refreshLinkedImages: Namens-Sync', () => {
     expect(r.project.images[added[0]].name).toBe('kopf');
     expect(r.project.images[added[0]].source?.name).toBe('kopf');
     expect(r.project.parts).toBe(p.parts);
+  });
+});
+
+describe('remapSourceIds', () => {
+  it('returns the same object when nothing maps', () => {
+    const { project } = linked();
+    expect(remapSourceIds(project, new Map())).toBe(project);
+    expect(remapSourceIds(project, new Map([['other', 'x']]))).toBe(project);
+    expect(remapSourceIds(createProject('humanoid'), new Map([[PID, 'n']]))).toBeTruthy();
+  });
+
+  it('rewrites image links and linkedFrames keys, keeps unmapped links, does not mutate', () => {
+    const a = linked([frame(1, 'head'), frame(2, 'random')]);
+    const b = linkFramesAsImages(a.project, 'foreign', src(frame(5, 'torso')));
+    const before = JSON.stringify(b.project);
+    const out = remapSourceIds(b.project, new Map([[PID, 'new-1']]));
+    expect(JSON.stringify(b.project)).toBe(before);
+    expect(out).not.toBe(b.project);
+    const byFrame = (id: string) => out.images[id].source;
+    expect(a.added.map((id) => byFrame(id)?.projectId)).toEqual(['new-1', 'new-1']);
+    expect(byFrame(b.added[0])?.projectId).toBe('foreign');
+    expect(byFrame(a.added[0])).toMatchObject({ frameId: 1, name: 'head' });
+    expect(Object.keys(out.linkedFrames!).sort()).toEqual(['foreign', 'new-1']);
+    expect(out.linkedFrames!['new-1']).toEqual([1, 2]);
+    expect(out.linkedFrames!['foreign']).toEqual([5]);
+  });
+
+  it('merges linkedFrames if two keys collapse onto one id', () => {
+    const p = { ...createProject('humanoid'), linkedFrames: { a: [3, 1], b: [2, 3] } };
+    const out = remapSourceIds(p, new Map([['a', 'z'], ['b', 'z']]));
+    expect(out.linkedFrames).toEqual({ z: [1, 2, 3] });
   });
 });
