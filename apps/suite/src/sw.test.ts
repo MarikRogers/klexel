@@ -12,9 +12,11 @@ class FakeCache {
   async match(r: string | { url: string }) { return this.entries.get(abs(r))?.clone(); }
   async put(r: string | { url: string }, res: Response) { this.entries.set(abs(r), res); }
   async addAll(urls: string[]) { for (const u of urls) this.entries.set(abs(u), await this.net(abs(u))); }
+  async keys() { return [...this.entries.keys()].map(url => ({ url })); }
+  async delete(r: string | { url: string }) { return this.entries.delete(abs(r)); }
 }
 
-function setup(cacheName: string, network: Record<string, string> | 'offline') {
+function setup(cacheName: string, network: Record<string, string> | 'offline', buildAssets?: string[]) {
   const net = async (url: string) => {
     if (network === 'offline') throw new TypeError('offline');
     const body = network[url];
@@ -36,7 +38,8 @@ function setup(cacheName: string, network: Record<string, string> | 'offline') {
     registration: { scope: BASE },
   };
   const fetchFn = (r: string | { url: string }) => net(abs(r));
-  const code = swTemplate.replace(/const CACHE = '[^']*';/, `const CACHE = '${cacheName}';`);
+  let code = swTemplate.replace(/const CACHE = '[^']*';/, `const CACHE = '${cacheName}';`);
+  if (buildAssets) code = code.replace('const BUILD_ASSETS = [];', `const BUILD_ASSETS = ${JSON.stringify(buildAssets)};`);
   new Function('self', 'caches', 'fetch', 'location', code)(self, caches, fetchFn, { origin: ORIGIN });
 
   async function dispatch(type: string, extra: object = {}): Promise<Response | undefined> {
@@ -91,6 +94,32 @@ describe('Service Worker', () => {
     for (const n of ['pixelart-v5', 'pixelart-v6', 'pixelart-klexel-v6', 'pixelart-v7', 'pixelart-rigsprite-v7', 'pixelart-klexel-v7', 'andere-app-v1']) await sw.caches.open(n);
     await sw.dispatch('activate');
     expect((await sw.caches.keys()).sort()).toEqual(['andere-app-v1', 'pixelart-klexel-v7']);
+  });
+
+  it('Aktivieren räumt den eigenen Cache auf: alte gehashte Dateien weg, aktuelle Fassung bleibt offline nutzbar', async () => {
+    const sw = setup('pixelart-klexel-v7', online, ['./assets/chunk-NEU.js']);
+    const own = await sw.caches.open('pixelart-klexel-v7');
+    // Stand eines früheren Deploys mit gleichem Cache-Namen
+    await own.put('./assets/index-ALT.js', new Response('alt'));
+    await own.put('./assets/chunk-ALT.js', new Response('alt'));
+    const foreign = await sw.caches.open('andere-app-v1');
+    await foreign.put('./assets/index-ALT.js', new Response('fremd'));
+    online[`${BASE}assets/chunk-NEU.js`] = 'chunk';
+    try {
+      await sw.dispatch('install');
+      await sw.dispatch('activate');
+    } finally { delete online[`${BASE}assets/chunk-NEU.js`]; }
+    const kept = [...own.entries.keys()];
+    expect(kept).not.toContain(`${BASE}assets/index-ALT.js`);
+    expect(kept).not.toContain(`${BASE}assets/chunk-ALT.js`);
+    for (const p of ['', 'assets/index-NEU.js', 'assets/chunk-NEU.js', 'impressum.html', 'favicon.png']) expect(kept).toContain(`${BASE}${p}`);
+    // Fremde Caches bleiben unangetastet
+    expect([...foreign.entries.keys()]).toEqual([`${BASE}assets/index-ALT.js`]);
+    // Offline startet die aktuelle Fassung weiter aus dem eigenen Cache
+    const off = setup('pixelart-klexel-v7', 'offline');
+    for (const [k, v] of sw.store) off.store.set(k, v);
+    expect(await (await off.dispatch('fetch', { request: off.request('./', 'navigate') }))!.text()).toContain('index-NEU.js');
+    expect(await (await off.dispatch('fetch', { request: off.request('./assets/chunk-NEU.js') }))!.text()).toBe('chunk');
   });
 
   it('Vorlage enthält die Platzhalter, die der Build ersetzt', () => {
