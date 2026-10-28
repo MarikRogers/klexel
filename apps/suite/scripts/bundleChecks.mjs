@@ -27,5 +27,5 @@ export function appNameFor(areas) {
 
 /** Cache-Name des Service Workers je Auswahl (wie cacheNameFor in src/areaNames.ts) */
 export function cacheNameFor(areas) {
-  return ALL.every(a => areas.includes(a)) ? 'pixelart-v6' : `pixelart-${[...areas].sort().join('-')}-v6`;
+  return ALL.every(a => areas.includes(a)) ? 'pixelart-v7' : `pixelart-${[...areas].sort().join('-')}-v7`;
 }

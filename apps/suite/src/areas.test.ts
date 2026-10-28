@@ -44,10 +44,10 @@ describe('Aussehen je Build', () => {
     expect(appNameFor(['rigsprite'])).toBe('RigSprite');
   });
   it('Cache-Name: Standard unverändert, jede andere Auswahl eigen', () => {
-    expect(cacheNameFor(['klexel', 'rigsprite'])).toBe('pixelart-v6');
-    expect(cacheNameFor(['rigsprite', 'klexel'])).toBe('pixelart-v6');
+    expect(cacheNameFor(['klexel', 'rigsprite'])).toBe('pixelart-v7');
+    expect(cacheNameFor(['rigsprite', 'klexel'])).toBe('pixelart-v7');
     const k = cacheNameFor(['klexel']), r = cacheNameFor(['rigsprite']);
-    expect(new Set(['pixelart-v6', k, r]).size).toBe(3);
+    expect(new Set(['pixelart-v7', k, r]).size).toBe(3);
   });
 });
 

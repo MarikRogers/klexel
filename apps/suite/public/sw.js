@@ -1,6 +1,6 @@
 // CACHE und BUILD_ASSETS setzt der Build je Bereichs-Auswahl ein (vite.config.ts, Plugin suite-area-branding):
 // eigener Cache-Name je Auswahl, BUILD_ASSETS = alle gebauten Dateien inkl. nachgeladener Bereichs-Chunks.
-const CACHE = 'pixelart-v6';
+const CACHE = 'pixelart-v7';
 const BUILD_ASSETS = [];
 // Alle Caches dieser App beginnen mit diesem Präfix. Beim Aktivieren werden alle anderen davon gelöscht (ältere
 // Fassungen und andere Bereichs-Auswahlen); Caches mit anderem Präfix bleiben unangetastet.

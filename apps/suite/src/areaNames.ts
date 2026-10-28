@@ -34,10 +34,10 @@ export function appNameFor(areas: readonly ProjectKind[]): string {
 }
 
 /**
- * Cache-Name des Service Workers je Bereichs-Auswahl. Der Standard-Build (alle Bereiche) behält „pixelart-v6",
+ * Cache-Name des Service Workers je Bereichs-Auswahl. Der Standard-Build (alle Bereiche) behält „pixelart-v7",
  * jede andere Auswahl bekommt einen eigenen Namen, damit sich zwei Auslieferungen auf einer Adresse nie den Cache teilen.
  */
 export function cacheNameFor(areas: readonly ProjectKind[]): string {
   const all = ALL_AREAS.every(a => areas.includes(a));
-  return all ? 'pixelart-v6' : `pixelart-${[...areas].sort().join('-')}-v6`;
+  return all ? 'pixelart-v7' : `pixelart-${[...areas].sort().join('-')}-v7`;
 }

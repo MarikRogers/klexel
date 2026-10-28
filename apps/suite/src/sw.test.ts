@@ -54,15 +54,15 @@ describe('Service Worker', () => {
   const online = { [BASE]: '<script src="./assets/index-NEU.js"></script>', [`${BASE}assets/index-NEU.js`]: 'neu' };
 
   it('liest nur aus dem eigenen Cache, nie aus einem alten pixelart-Cache', async () => {
-    const sw = setup('pixelart-klexel-v6', online);
+    const sw = setup('pixelart-klexel-v7', online);
     // alter Cache mit veraltetem index und veralteter Datei liegt daneben
-    const old = await sw.caches.open('pixelart-v6');
+    const old = await sw.caches.open('pixelart-v7');
     await old.put('./', new Response('ALT'));
     await old.put('./assets/index-NEU.js', new Response('ALT'));
     await sw.dispatch('install');
-    expect([...(await sw.caches.open('pixelart-klexel-v6')).entries.keys()]).toContain(`${BASE}assets/index-NEU.js`);
+    expect([...(await sw.caches.open('pixelart-klexel-v7')).entries.keys()]).toContain(`${BASE}assets/index-NEU.js`);
 
-    const offline = setup('pixelart-klexel-v6', 'offline');
+    const offline = setup('pixelart-klexel-v7', 'offline');
     // Zustand übernehmen: beide Caches, aber jetzt offline
     for (const [k, v] of sw.store) offline.store.set(k, v);
     const page = await offline.dispatch('fetch', { request: offline.request('./', 'navigate') });
@@ -72,14 +72,14 @@ describe('Service Worker', () => {
   });
 
   it('Seite: Netz zuerst und frisch in den eigenen Cache; offline aus dem Cache', async () => {
-    const sw = setup('pixelart-v6', online);
+    const sw = setup('pixelart-v7', online);
     await sw.dispatch('install');
     const fresh = { ...online, [BASE]: 'NEUER INDEX' };
-    const on = setup('pixelart-v6', fresh);
+    const on = setup('pixelart-v7', fresh);
     for (const [k, v] of sw.store) on.store.set(k, v);
     expect(await (await on.dispatch('fetch', { request: on.request('./', 'navigate') }))!.text()).toBe('NEUER INDEX');
     await new Promise(r => setTimeout(r, 0)); // Nachcachen läuft im Hintergrund
-    const off = setup('pixelart-v6', 'offline');
+    const off = setup('pixelart-v7', 'offline');
     for (const [k, v] of on.store) off.store.set(k, v);
     expect(await (await off.dispatch('fetch', { request: off.request('./', 'navigate') }))!.text()).toBe('NEUER INDEX');
     // Unbekannte Seite offline → App-Seite als Rückfall
@@ -87,14 +87,14 @@ describe('Service Worker', () => {
   });
 
   it('Aktivieren löscht alte pixelart-Caches, aber keine fremden', async () => {
-    const sw = setup('pixelart-klexel-v6', online);
-    for (const n of ['pixelart-v5', 'pixelart-v6', 'pixelart-rigsprite-v6', 'pixelart-klexel-v6', 'andere-app-v1']) await sw.caches.open(n);
+    const sw = setup('pixelart-klexel-v7', online);
+    for (const n of ['pixelart-v5', 'pixelart-v6', 'pixelart-klexel-v6', 'pixelart-v7', 'pixelart-rigsprite-v7', 'pixelart-klexel-v7', 'andere-app-v1']) await sw.caches.open(n);
     await sw.dispatch('activate');
-    expect((await sw.caches.keys()).sort()).toEqual(['andere-app-v1', 'pixelart-klexel-v6']);
+    expect((await sw.caches.keys()).sort()).toEqual(['andere-app-v1', 'pixelart-klexel-v7']);
   });
 
   it('Vorlage enthält die Platzhalter, die der Build ersetzt', () => {
-    expect(swTemplate).toMatch(/const CACHE = 'pixelart-v6';/);
+    expect(swTemplate).toMatch(/const CACHE = 'pixelart-v7';/);
     expect(swTemplate).toContain('const BUILD_ASSETS = [];');
     expect(swTemplate).not.toMatch(/caches\.match\(/);
   });
