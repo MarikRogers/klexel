@@ -38,4 +38,33 @@ describe('migrateLegacy', () => {
     await migrateLegacy(ws, kv, read);
     expect(read).toHaveBeenCalledTimes(1);
   });
+
+  it('Fehler bei setLastOpened erzeugt beim Wiederholen kein Duplikat', async () => {
+    const kv = new MemoryBackend();
+    const origSet = kv.set.bind(kv);
+    let fail = true;
+    kv.set = async (k: string, v: unknown) => {
+      if (k === 'ws:last' && fail) { fail = false; throw new Error('boom'); }
+      return origSet(k, v);
+    };
+    const ws = new WorkspaceStore(kv);
+    await expect(migrateLegacy(ws, kv, async () => ({ a: 1 }))).rejects.toThrow('boom');
+    expect(await migrateLegacy(ws, kv, async () => ({ a: 1 }))).toBe('done-before');
+    expect(await ws.list()).toHaveLength(1);
+  });
+
+  it('Fehler bei create setzt keinen Marker, Wiederholen migriert', async () => {
+    const kv = new MemoryBackend();
+    const origSet = kv.set.bind(kv);
+    let fail = true;
+    kv.set = async (k: string, v: unknown) => {
+      if (k.startsWith('ws:p:') && fail) { fail = false; throw new Error('boom'); }
+      return origSet(k, v);
+    };
+    const ws = new WorkspaceStore(kv);
+    await expect(migrateLegacy(ws, kv, async () => ({ a: 1 }))).rejects.toThrow('boom');
+    expect(await kv.get('ws:migrated')).toBeUndefined();
+    expect(await migrateLegacy(ws, kv, async () => ({ a: 1 }))).toBe('migrated');
+    expect(await ws.list()).toHaveLength(1);
+  });
 });
