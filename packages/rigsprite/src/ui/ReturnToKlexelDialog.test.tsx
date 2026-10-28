@@ -10,7 +10,7 @@ import { useEditor } from '../state/store';
 import { makeImageAsset, makePart } from '../test/fixtures';
 import { ExportDialog } from './ExportDialog';
 import { ReturnToKlexelDialog } from './ReturnToKlexelDialog';
-import { LIMIT_TEXT, initialOptions, planFor, warningText } from './returnDialogLogic';
+import { LIMIT_TEXT, fpsHint, initialOptions, planFor, warningText } from './returnDialogLogic';
 import { SuiteContext, type SuiteBridge } from './suiteBridge';
 
 /** Humanoid mit einem Bild der Größe w×h und der Walk-Vorlage (Länge optional). */
@@ -71,6 +71,12 @@ describe('returnDialogLogic', () => {
     expect(LIMIT_TEXT).toBe('Zu groß für Klexel: höchstens 128×128 Pixel und 64 Frames');
     expect(planFor(size, plan.suggestion)).toEqual({ ok: true, width: 100, height: 34, frames: 64 });
   });
+
+  it('fps-Hinweis nur über 30 fps', () => {
+    expect(fpsHint(30)).toBeNull();
+    expect(fpsHint(12)).toBeNull();
+    expect(fpsHint(60)).toBe('Klexel unterstützt höchstens 30 fps – die Animation wird mit 30 fps angelegt.');
+  });
 });
 
 describe('ReturnToKlexelDialog', () => {
@@ -95,6 +101,20 @@ describe('ReturnToKlexelDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'In Klexel öffnen' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(suite.openProject).toHaveBeenCalledWith(`k-${size.frameCount}`);
+  });
+
+  it('mehr als 30 fps: Hinweis unter der Größe, Anlegen bleibt möglich; bis 30 fps kein Hinweis', () => {
+    const fast = project();
+    fast.animations = [{ ...fast.animations[0], fps: 60 }];
+    useEditor.getState().loadProject(fast);
+    show(bridge());
+    expect(screen.getByTestId('return-fps-hint').textContent).toBe('Klexel unterstützt höchstens 30 fps – die Animation wird mit 30 fps angelegt.');
+    expect(createBtn().disabled).toBe(false);
+    cleanup();
+    useEditor.getState().loadProject(project());
+    show(bridge());
+    expect(currentSize().fps).toBeLessThanOrEqual(30);
+    expect(screen.queryByTestId('return-fps-hint')).toBeNull();
   });
 
   it('zu groß: Warnung, „Anlegen" gesperrt und nichts angelegt; Vorschlag übernehmen → verkleinert anlegen', async () => {

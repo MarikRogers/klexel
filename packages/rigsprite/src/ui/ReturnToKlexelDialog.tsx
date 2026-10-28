@@ -5,7 +5,7 @@ import { errorMessage } from '../core/messages';
 import { downscaleNearest, type ReturnOptions } from '../core/returnPlan';
 import { renderAnimationFrames } from '../render/renderSheet';
 import { useEditor } from '../state/store';
-import { fromUiIndex, initialOptions, planFor, suggestionText, warningText } from './returnDialogLogic';
+import { fpsHint, fromUiIndex, initialOptions, planFor, suggestionText, warningText } from './returnDialogLogic';
 import { useSuite } from './suiteBridge';
 
 type Fields = { scale: string; from: string; to: string };
@@ -112,6 +112,9 @@ export function ReturnToKlexelDialog({
               <p className="return-size" data-testid="return-size">
                 Frame-Größe {size.width}×{size.height} Pixel · {size.frameCount} Frames · {size.fps} fps
               </p>
+            )}
+            {size && fpsHint(size.fps) && (
+              <p className="hint" data-testid="return-fps-hint">{fpsHint(size.fps)}</p>
             )}
             <div className="return-fields">
               <label>

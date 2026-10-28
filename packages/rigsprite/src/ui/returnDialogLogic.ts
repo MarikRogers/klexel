@@ -20,6 +20,16 @@ export function planFor(size: FrameSize | null, opts: ReturnOptions): ReturnPlan
 
 export const LIMIT_TEXT = `Zu groß für Klexel: höchstens ${RETURN_MAX_SIZE}×${RETURN_MAX_SIZE} Pixel und ${RETURN_MAX_FRAMES} Frames`;
 
+/** Höchste Bildrate von Klexel (klexelFromFrames begrenzt darauf). */
+export const KLEXEL_MAX_FPS = 30;
+
+/** Hinweis, wenn die Animation schneller ist, als Klexel abspielen kann; sonst null. */
+export function fpsHint(fps: number): string | null {
+  return fps > KLEXEL_MAX_FPS
+    ? `Klexel unterstützt höchstens ${KLEXEL_MAX_FPS} fps – die Animation wird mit ${KLEXEL_MAX_FPS} fps angelegt.`
+    : null;
+}
+
 /** Deutsche Warnung zu einer nicht passenden Planung (mit den konkreten Werten). */
 export function warningText(size: FrameSize, opts: ReturnOptions, plan: Extract<ReturnPlan, { ok: false }>): string {
   const parts: string[] = [];
