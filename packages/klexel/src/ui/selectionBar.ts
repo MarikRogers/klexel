@@ -1,6 +1,7 @@
 import type { SelectionSession, LiftResult } from '../edit/SelectionSession';
 import { ICON } from './icons';
 import { showToast } from './toast';
+import { SELECTION_SHORTCUT_LABEL, type SelectionShortcut } from './shortcuts';
 
 type Mode = 'replace' | 'add' | 'subtract';
 type Shape = 'rect' | 'lasso' | 'wand';
@@ -39,8 +40,11 @@ export function createSelectionBar(deps: SelectionBarDeps): SelectionBar {
   const el = document.createElement('div');
   el.id = 'selbar';
   el.hidden = true;
-  const btn = (act: string, label: string, icon: string, extra = '') =>
-    `<button data-act="${act}" title="${label}" aria-label="${label}"${extra}>${icon}</button>`;
+  const btn = (act: string, label: string, icon: string, extra = '') => {
+    const key = SELECTION_SHORTCUT_LABEL[act as SelectionShortcut];
+    const title = key ? `${label} (${key})` : label;
+    return `<button data-act="${act}" title="${title}" aria-label="${label}"${extra}>${icon}</button>`;
+  };
   el.innerHTML = `
     <div class="selbar-row">
     <div class="selbar-group selbar-shapes" role="group" aria-label="Auswahlform">

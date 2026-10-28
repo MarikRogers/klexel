@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shortcutFor, isTypingTarget } from './shortcuts';
+import { shortcutFor, selectionShortcutFor, isTypingTarget } from './shortcuts';
 
 const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) =>
   ({ key: k, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...mods });
@@ -25,6 +25,28 @@ describe('shortcutFor', () => {
     expect(shortcutFor(key('z', { ctrlKey: true, altKey: true }))).toBeNull();
     expect(shortcutFor(key('y', { ctrlKey: true, shiftKey: true }))).toBeNull();
     expect(shortcutFor(key('x', { ctrlKey: true }))).toBeNull();
+  });
+});
+
+describe('selectionShortcutFor', () => {
+  it('maps the clipboard and select-all shortcuts', () => {
+    expect(selectionShortcutFor(key('c', { ctrlKey: true }))).toBe('copy');
+    expect(selectionShortcutFor(key('X', { ctrlKey: true }))).toBe('cut');
+    expect(selectionShortcutFor(key('v', { metaKey: true }))).toBe('paste');
+    expect(selectionShortcutFor(key('a', { ctrlKey: true }))).toBe('all');
+  });
+
+  it('maps Delete, Backspace and Escape', () => {
+    expect(selectionShortcutFor(key('Delete'))).toBe('delete');
+    expect(selectionShortcutFor(key('Backspace'))).toBe('delete');
+    expect(selectionShortcutFor(key('Escape'))).toBe('none');
+  });
+
+  it('ignores plain letters and other combinations', () => {
+    expect(selectionShortcutFor(key('c'))).toBeNull();
+    expect(selectionShortcutFor(key('c', { ctrlKey: true, shiftKey: true }))).toBeNull();
+    expect(selectionShortcutFor(key('c', { ctrlKey: true, altKey: true }))).toBeNull();
+    expect(selectionShortcutFor(key('Delete', { shiftKey: true }))).toBeNull();
   });
 });
 

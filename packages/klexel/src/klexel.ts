@@ -18,7 +18,7 @@ import { ICON } from './ui/icons';
 import { createLayersPanel } from './ui/layersPanel';
 import { createFramesPanel } from './ui/framesPanel';
 import { createSelectionBar } from './ui/selectionBar';
-import { shortcutFor, isTypingTarget } from './ui/shortcuts';
+import { shortcutFor, selectionShortcutFor, isTypingTarget } from './ui/shortcuts';
 import { createAboutDialog } from './ui/aboutDialog';
 import { createPhotoDialog } from './ui/photoDialog';
 import { createShareDialog } from './ui/shareDialog';
@@ -520,11 +520,14 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
   $('redo').onclick = () => { precision.cancel(); endStroke(false); cancelShape(); history.commitProps(); history.redo(); panel.invalidate(); framesPanel.invalidate(); refresh(); scheduleSave(); };
   // Tastatur: Strg/Cmd+Z = Rückgängig, Strg/Cmd+Umschalt+Z oder Strg+Y = Wiederholen (wie die Buttons; gesperrte Buttons tun nichts)
   listen(document, 'keydown', e => {
-    const action = shortcutFor(e);
-    if (!action || isTypingTarget(e.target as HTMLElement | null)) return;
+    if (isTypingTarget(e.target as HTMLElement | null)) return;
     if (pointers.size > 0 || document.querySelector('dialog[open]')) return;
+    const action = shortcutFor(e);
+    if (action) { e.preventDefault(); $(action).click(); return; }
+    const selAction = tool === 'select' ? selectionShortcutFor(e) : null;
+    if (!selAction) return;
     e.preventDefault();
-    $(action).click();
+    selectionBar.el.querySelector<HTMLButtonElement>(`[data-act=${selAction}]`)?.click();
   });
   $('layersBtn').onclick = () => { framesPanel.close(); panel.toggle(); refresh(); };
   $('framesBtn').onclick = () => { panel.close(); framesPanel.toggle(); refresh(); };
