@@ -6,6 +6,7 @@
 /* Schmales Hochformat: Marke nur als Symbol, damit Marke, Projekte und Datei-Knöpfe in eine Zeile passen
    (sonst bricht die Kopfleiste in drei Zeilen um und die Zeichenfläche wird kleiner) */
 @media (orientation: portrait) and (max-width: 419px) {
+  /* Kopplung an Klexels Kopfleiste (#top > .brand > span, siehe klexel.ts) */
   #top .brand span { display:none; }
 }
 /* Während eines Wechsels keine Eingaben auf der Zeichenfläche */

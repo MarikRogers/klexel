@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextUntitledName, filterProjects, formatUpdated, parseSize } from './listModel';
+import { nextUntitledName, filterProjects, formatUpdated, parseSize, afterRemoveError } from './listModel';
 import type { ProjectMeta } from '../workspace/types';
 
 const meta = (name: string): ProjectMeta => ({ id: name, kind: 'klexel', name, updatedAt: 0 });
@@ -50,5 +50,18 @@ describe('parseSize', () => {
     expect(parseSize('')).toBeNull();
     expect(parseSize('abc')).toBeNull();
     expect(parseSize('3.5')).toBeNull();
+  });
+});
+
+describe('afterRemoveError', () => {
+  it('Projekt noch vorhanden → wiederherstellen', () => {
+    expect(afterRemoveError('A', [meta('A'), meta('B')])).toBe('restore');
+  });
+  it('Liste nicht lesbar → wiederherstellen (sichern auf gelöschte ID ist ein No-op)', () => {
+    expect(afterRemoveError('A', null)).toBe('restore');
+  });
+  it('Projekt schon entfernt → anderes öffnen', () => {
+    expect(afterRemoveError('A', [meta('B')])).toBe('fallback');
+    expect(afterRemoveError('A', [])).toBe('fallback');
   });
 });

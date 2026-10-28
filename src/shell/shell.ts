@@ -12,7 +12,7 @@ import { migrateLegacy } from '../workspace/migrateLegacy';
 import type { ProjectMeta } from '../workspace/types';
 import { showToast } from '../ui/toast';
 import { createAutosave } from './autosave';
-import { nextUntitledName } from './listModel';
+import { nextUntitledName, afterRemoveError } from './listModel';
 import { snapshotKey } from './snapshotKey';
 import { createProjectList } from './projectList';
 
@@ -100,7 +100,8 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
   const host: AreaHost = {
     onChange: () => autosave.schedule(),
     requestNewProject: init => { void newProject(init ?? { width: 32, height: 32 }); },
-    isActive: () => true,
+    // Während eines Wechsels inaktiv: Klexel ignoriert dann Tastenkürzel (und merkt Größenänderungen nur vor)
+    isActive: () => !switching,
   };
 
   const { mountKlexel } = await import('../klexel');
@@ -127,6 +128,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
       try { return await fn(); } finally {
         switching = false;
         document.body.classList.remove('shell-busy');
+        handle.setActive(true); // vorgemerkte Größenänderung nachholen
       }
     });
     queue = run.catch(() => undefined);
@@ -188,14 +190,39 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
       const base = handle.snapshot();
       currentId = null;
       autosave.cancel();
-      await autosave.flush().catch(() => undefined); // laufenden Schreibvorgang abwarten
-      await store.remove(id);
-      for (const m of (await store.list()).filter(canOpen)) {
-        const payload = await store.load(m.id);
-        if (decodeKlexel(payload)) { await openLoaded(m.id, payload, !!m.thumbnail); return; }
+      try {
+        await autosave.flush().catch(() => undefined); // laufenden Schreibvorgang abwarten
+        await store.remove(id);
+        await openFallback(base);
+      } catch (err) {
+        console.error('Löschen fehlgeschlagen', err);
+        const after = await store.list().catch(() => null);
+        if (afterRemoveError(id, after) === 'restore') {
+          // Projekt existiert noch: weiter bearbeiten und die verworfene Änderung erneut vormerken
+          currentId = id;
+          autosave.schedule();
+          showToast('Löschen fehlgeschlagen – das Projekt bleibt erhalten', 3000);
+        } else {
+          showToast('Fehler nach dem Löschen – ein anderes Projekt wird geöffnet', 3000);
+          try { await openFallback(base); } catch (err2) {
+            // Letzter Ausweg: geöffnet lassen; Sichern auf die gelöschte ID ist ein No-op
+            console.error(err2);
+            currentId = id;
+            showToast('Kein anderes Projekt konnte geöffnet werden', 4000);
+          }
+        }
+        throw err;
       }
-      await createAndOpen({ width: 32, height: 32 }, base);
     });
+  }
+
+  /** Nächstes lesbares Klexel-Projekt öffnen, sonst ein leeres anlegen. */
+  async function openFallback(base: SavedState): Promise<void> {
+    for (const m of (await store.list()).filter(canOpen)) {
+      const payload = await store.load(m.id);
+      if (decodeKlexel(payload)) { await openLoaded(m.id, payload, !!m.thumbnail); return; }
+    }
+    await createAndOpen({ width: 32, height: 32 }, base);
   }
 
   function duplicateProject(id: string): Promise<void> {
@@ -224,6 +251,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
   btn.setAttribute('aria-label', 'Projekte');
   btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h7l2 2h9v11H2z"/></svg>`;
   btn.onclick = () => { handle.flush(); list?.open(); };
+  // Kopplung an Klexels Kopfleiste: setzt #brand in #top voraus (siehe klexel.ts); fehlt die Marke, gibt es keinen Knopf
   document.getElementById('brand')?.after(btn);
 
   // Beim Verstecken/Schließen sofort sichern (Klexels eigener Listener meldet vorher onChange)

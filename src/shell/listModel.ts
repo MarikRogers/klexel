@@ -34,3 +34,12 @@ export function parseSize(v: string): number | null {
   const n = Number(v);
   return n >= 1 && n <= MAX_SIZE ? n : null;
 }
+
+/**
+ * Nach einem Fehler beim Löschen des offenen Projekts: Existiert es noch (oder lässt sich das nicht feststellen),
+ * bleibt es geöffnet und wird weiter gesichert ('restore'); ist es weg, wird ein anderes geöffnet ('fallback').
+ */
+export function afterRemoveError(removedId: string, listAfter: ProjectMeta[] | null): 'restore' | 'fallback' {
+  if (listAfter === null) return 'restore';
+  return listAfter.some(m => m.id === removedId) ? 'restore' : 'fallback';
+}
