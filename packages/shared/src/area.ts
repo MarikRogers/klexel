@@ -1,4 +1,5 @@
 import type { ProjectKind } from './workspace/types';
+import type { SourceService } from './sources';
 
 /** Größte Bildbreite/-höhe neuer Projekte (Klexel: MAX_SIZE). */
 export const MAX_IMAGE_SIZE = 128;
@@ -23,6 +24,8 @@ export interface AreaHost {
   openProjects?(): void;
   /** Ist der Bereich gerade sichtbar und bedienbar? */
   isActive(): boolean;
+  /** Bild-Quellen anderer Projekte (Klexel-Frames); fehlt, wenn kein Bereich dieses Builds Frames liefern kann. */
+  sources?: SourceService;
 }
 
 /** Steuerung eines eingehängten Bereichs durch die Hülle. */

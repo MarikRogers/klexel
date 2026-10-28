@@ -4,9 +4,9 @@
 // Jeder Bereich wird beim ersten Projekt seiner Art in einen eigenen Container eingehängt (Klexel: #app, weitere:
 // #area-<art> daneben) und bleibt danach eingehängt; sichtbar und aktiv ist nur der Bereich des offenen Projekts.
 import './shell.css';
-import type { AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, ProjectMeta } from '@suite/shared';
+import type { AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, ProjectMeta, SourceService } from '@suite/shared';
 import { WorkspaceStore, IdbBackend, migrateLegacy, DEFAULT_AUTOSAVE_DELAY_MS } from '@suite/shared';
-import { showToast } from '@suite/shared/ui';
+import { showToast, pixelsToDataUrl } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
 import { nextUntitledName, afterRemoveError, isOpenable, latestOfKind, NEW_PROJECT_SIZE } from './listModel';
 import { createProjectList } from './projectList';
@@ -24,6 +24,8 @@ const BLANK: NewProjectInit = NEW_PROJECT_SIZE;
 export interface ShellOptions {
   /** Speicher des Workspace (Standard: IndexedDB; Tests: MemoryBackend) */
   backend?: KvBackend;
+  /** Pixel → PNG-Data-URL für host.sources (Standard: pixelsToDataUrl über ein Canvas; Tests: ohne Canvas) */
+  toDataUrl?: (width: number, height: number, pixels: Uint32Array) => string;
 }
 
 /** Ein Bereich dieses Builds: Beschreibung, Container und (nach dem ersten Öffnen) der eingehängte Editor. */
@@ -130,6 +132,33 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     },
   });
 
+  // Bild-Quellen (Klexel → Rigsprite): nur, wenn ein Bereich dieses Builds Frames liefern kann (framesOf). Ohne
+  // Klexel im Build fehlt der Dienst, und Rigsprite blendet die Verknüpfung aus.
+  const frameKinds = descriptors.filter(d => d.framesOf);
+  const toDataUrl = opts.toDataUrl ?? pixelsToDataUrl;
+  const sources: SourceService | undefined = frameKinds.length === 0 ? undefined : {
+    list: async () => (await store.list()).filter(m => frameKinds.some(d => d.kind === m.kind)),
+    async read(projectId) {
+      const meta = (await store.list()).find(m => m.id === projectId);
+      const d = meta && frameKinds.find(k => k.kind === meta.kind);
+      if (!meta || !d) return null;
+      // Ist die Quelle gerade offen, erst sichern, damit ungesicherte Änderungen mitkommen
+      if (projectId === currentId) {
+        try { await saveCurrent(); } catch (err) { console.error('Sichern vor dem Lesen der Quelle fehlgeschlagen', err); }
+      }
+      const payload = d.decode(await store.load(projectId));
+      const content = payload === null ? null : d.framesOf!(payload);
+      if (!content) return null;
+      return {
+        projectName: meta.name || content.name,
+        frames: content.frames.map(f => ({
+          frameId: f.frameId, name: f.name, width: f.width, height: f.height,
+          dataUrl: toDataUrl(f.width, f.height, f.pixels),
+        })),
+      };
+    },
+  };
+
   function hostFor(kind: string): AreaHost {
     return {
       // Meldungen eines verdeckten Bereichs betreffen nicht das offene Projekt
@@ -139,6 +168,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       // Größenänderungen nur vor; Rigsprite ignoriert Tastenkürzel)
       isActive: () => !switching && currentKind === kind,
       openProjects: () => openList(),
+      ...(sources ? { sources } : {}),
     };
   }
 

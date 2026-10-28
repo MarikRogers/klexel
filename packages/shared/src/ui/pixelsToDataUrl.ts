@@ -17,7 +17,12 @@ export function rgbaToDataUrl(width: number, height: number, rgba: Uint8ClampedA
   const c = document.createElement('canvas');
   c.width = width;
   c.height = height;
-  c.getContext('2d')!.putImageData(new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, width, height), 0, 0);
+  // createImageData + set statt new ImageData(rgba): kommt ohne den generischen Typ Uint8ClampedArray<ArrayBuffer>
+  // aus, den Rigsprites älteres TypeScript nicht kennt (Rigsprite bindet '@suite/shared/ui' ein)
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(width, height);
+  img.data.set(rgba);
+  ctx.putImageData(img, 0, 0);
   return c.toDataURL('image/png');
 }
 

@@ -237,6 +237,81 @@ describe('startShell: Bereichswechsel', () => {
   });
 });
 
+describe('startShell: Bild-Quellen (host.sources)', () => {
+  // Fake-„Klexel": v = Pixelwert; zwei Frames, der zweite unbenannt
+  const withFrames = (f: Fake) => {
+    f.d.framesOf = p => (p.v < 0 ? null : {
+      name: 'intern',
+      frames: [
+        { frameId: 1, name: 'head', width: 2, height: 1, pixels: new Uint32Array([p.v, 0]) },
+        { frameId: 4, name: 'Frame 2', width: 1, height: 1, pixels: new Uint32Array([7]) },
+      ],
+    });
+  };
+  const toDataUrl = (w: number, h: number, px: Uint32Array) => `png:${w}x${h}:${[...px].join(',')}`;
+
+  it('ohne Bereich mit framesOf gibt es keinen Dienst', async () => {
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, [R.d] as unknown as AreaDescriptor<unknown>[], { backend: kv, toDataUrl });
+    expect(R.host!.sources).toBeUndefined();
+  });
+
+  it('list: nur Projekte der Arten mit Frames; read: Frames als Bilder mit Projektname', async () => {
+    withFrames(K);
+    const k = await store.create('klexel', 'Figur', { kind: 'klexel', v: 9 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    const src = R.host!.sources!;
+    expect((await src.list()).map(m => m.id)).toEqual([k.id]);
+    expect(await src.read(k.id)).toEqual({
+      projectName: 'Figur',
+      frames: [
+        { frameId: 1, name: 'head', width: 2, height: 1, dataUrl: 'png:2x1:9,0' },
+        { frameId: 4, name: 'Frame 2', width: 1, height: 1, dataUrl: 'png:1x1:7' },
+      ],
+    });
+  });
+
+  it('read: gelöscht, unbekannt, falsche Art oder unlesbar → null', async () => {
+    withFrames(K);
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const bad = await store.create('klexel', 'kaputt', { kind: 'klexel', v: -1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    const src = R.host!.sources!;
+    await store.remove(k.id);
+    expect(await src.read(k.id)).toBeNull();
+    expect(await src.read('gibt-es-nicht')).toBeNull();
+    expect(await src.read(r.id)).toBeNull();
+    expect(await src.read(bad.id)).toBeNull();
+  });
+
+  it('read des gerade offenen Projekts sichert vorher (ungesicherte Änderungen zählen mit)', async () => {
+    withFrames(K);
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.setLastOpened(k.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    K.content = { kind: 'klexel', v: 42 }; // noch nicht gesichert
+    const res = await K.host!.sources!.read(k.id);
+    expect(res!.frames[0].dataUrl).toBe('png:2x1:42,0');
+    expect(await store.load(k.id)).toEqual({ kind: 'klexel', v: 42 });
+  });
+
+  it('nach dem Wechsel zu Rigsprite liest read den beim Wechsel gesicherten Klexel-Stand', async () => {
+    withFrames(K);
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    K.content = { kind: 'klexel', v: 5 };
+    await shell.switchProject(r.id);
+    expect((await R.host!.sources!.read(k.id))!.frames[0].dataUrl).toBe('png:2x1:5,0');
+  });
+});
+
 async function startNewViaHost(host: AreaHost, content: unknown): Promise<void> {
   host.requestNewProject(undefined, content);
   await tick(100);

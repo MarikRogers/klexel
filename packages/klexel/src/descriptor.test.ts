@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { klexelDescriptor as d, AREA_MARKER } from './index';
-import { decodeKlexel } from './storage/projectCodec';
+import { decodeKlexel, encodeKlexel } from './storage/projectCodec';
 import { PICO8 } from './palette/palettes';
 import { MAX_IMAGE_SIZE } from '@suite/shared';
-import { MAX_SIZE } from './model/Document';
+import { MAX_SIZE, PixelDocument } from './model/Document';
 
 describe('klexelDescriptor', () => {
   it('Art, Titel und Marker', () => {
@@ -42,6 +42,46 @@ describe('klexelDescriptor', () => {
 
   it('decode: Unlesbares → null', () => {
     for (const raw of [null, undefined, 42, 'x', {}, { version: 3 }, []]) expect(d.decode(raw)).toBeNull();
+  });
+
+  describe('framesOf', () => {
+    /** 2×1-Dokument mit zwei Frames (erster benannt) und zwei Ebenen */
+    function twoFrames() {
+      const doc = new PixelDocument(2, 1);
+      const f2 = doc.createFrame();
+      doc.insertFrame(f2, 1);
+      doc.renameFrame(1, 'upperArm_L');
+      const top = doc.createLayer('oben');
+      doc.insertLayer(top, 1);
+      doc.ensureCel(1, 1).set([0xff0000ff, 0x00ff00ff]);
+      doc.ensureCel(top.id, 1).set([0, 0x0000ffff]); // oben deckt nur Pixel 2
+      doc.ensureCel(1, f2.id).set([0x123456ff, 0]);
+      return { doc, f2 };
+    }
+
+    it('liefert je Frame das zusammengerechnete Bild in Originalgröße mit Namen bzw. „Frame <n>"', () => {
+      const { doc, f2 } = twoFrames();
+      const r = d.framesOf!(encodeKlexel(doc, [...PICO8], PICO8[0]))!;
+      expect(r.name).toBe('');
+      expect(r.frames.map(f => [f.frameId, f.name, f.width, f.height])).toEqual([
+        [1, 'upperArm_L', 2, 1],
+        [f2.id, 'Frame 2', 2, 1],
+      ]);
+      expect([...r.frames[0].pixels]).toEqual([0xff0000ff, 0x0000ffff]);
+      expect([...r.frames[0].pixels]).toEqual([...doc.compositeFrame(1)]);
+      expect([...r.frames[1].pixels]).toEqual([0x123456ff, 0]);
+    });
+
+    it('ausgeblendete Ebenen und Deckkraft wirken wie im Editor', () => {
+      const { doc } = twoFrames();
+      doc.setLayerProps(doc.layers[1].id, { visible: false });
+      const r = d.framesOf!(encodeKlexel(doc, [...PICO8], PICO8[0]))!;
+      expect([...r.frames[0].pixels]).toEqual([0xff0000ff, 0x00ff00ff]);
+    });
+
+    it('Unlesbares → null', () => {
+      for (const raw of [null, 42, 'x', {}, { version: 3, width: 'a' }]) expect(d.framesOf!(raw as never)).toBeNull();
+    });
   });
 
   it('changeKey: gleich bei gleichem Inhalt, verschieden nach einer Pixeländerung', () => {

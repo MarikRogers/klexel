@@ -1,5 +1,6 @@
 import type { ProjectKind } from './workspace/types';
 import type { Area, NewProjectInit } from './area';
+import type { PixelFrame } from './sources';
 
 /**
  * Leichte, statisch ladbare Beschreibung eines Bereichs: alles, was die Hülle über die Projekte dieser Art
@@ -28,6 +29,12 @@ export interface AreaDescriptor<P> {
    * Ohne Angabe: DEFAULT_AUTOSAVE_DELAY_MS (für Bereiche, die selbst schon entprellt melden, wie Klexel).
    */
   autosaveDelayMs?: number;
+  /**
+   * Frames eines gespeicherten Inhalts als Pixel (DOM-frei), damit andere Bereiche sie als Bilder verwenden können
+   * (Klexel → Rigsprite). name = Anzeigename aus dem Inhalt, falls er einen hat (sonst leer; die Hülle nimmt dann den
+   * Projektnamen). null = nicht lesbar. Fehlt bei Arten, die keine Frames liefern.
+   */
+  framesOf?(payload: P): { name: string; frames: PixelFrame[] } | null;
 }
 
 /** Standard-Wartezeit des Autosaves der Hülle (Klexel meldet bereits entprellt, 500 ms). */

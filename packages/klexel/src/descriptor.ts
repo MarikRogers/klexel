@@ -1,5 +1,6 @@
 // Leichte Beschreibung des Bereichs Klexel für die Hülle (ohne den Editor; der kommt erst mit load()).
-import type { AreaDescriptor, NewProjectInit } from '@suite/shared';
+import type { AreaDescriptor, NewProjectInit, PixelFrame } from '@suite/shared';
+import { compositeLayers } from '@suite/shared';
 import { PixelDocument } from './model/Document';
 import { PICO8 } from './palette/palettes';
 import { encodeKlexel, decodeKlexel } from './storage/projectCodec';
@@ -33,4 +34,26 @@ export const klexelDescriptor: AreaDescriptor<SavedState> & { marker: string } =
   },
   legacyName: 'Mein Bild',
   newProjectSize: true,
+  framesOf: payload => framesOfKlexel(payload),
 };
+
+/**
+ * Frames eines Klexel-Stands für Rigsprite: je Frame die sichtbaren Ebenen zusammengerechnet (wie PNG-Export),
+ * in Originalgröße; Name = Frame-Name, sonst „Frame <n>" (n = Position). null = nicht lesbar. Der Stand trägt
+ * keinen eigenen Namen (der steht in der Projektliste), daher name = ''.
+ */
+export function framesOfKlexel(raw: unknown): { name: string; frames: PixelFrame[] } | null {
+  let decoded;
+  try { decoded = decodeKlexel(raw); } catch { return null; }
+  if (!decoded) return null;
+  const { doc } = decoded;
+  const length = doc.width * doc.height;
+  const frames = doc.frames.map((f, i): PixelFrame => ({
+    frameId: f.id,
+    name: f.name || `Frame ${i + 1}`,
+    width: doc.width,
+    height: doc.height,
+    pixels: compositeLayers(doc.layers.map(l => ({ visible: l.visible, opacity: l.opacity, cel: l.cels.get(f.id) })), length),
+  }));
+  return { name: '', frames };
+}
