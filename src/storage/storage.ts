@@ -46,6 +46,11 @@ export async function loadState(): Promise<{ doc: PixelDocument; palette: number
   try { return parseState(await kv<unknown>('readonly', st => st.get('current'))); } catch { return null; }
 }
 
+// Roher Alt-Eintrag für die Übernahme in den Workspace; wird nur gelesen
+export async function readLegacyState(): Promise<unknown | null> {
+  try { return (await kv<unknown>('readonly', st => st.get('current'))) ?? null; } catch { return null; }
+}
+
 export function exportPng(doc: PixelDocument, scale: number): Promise<Blob> {
   const c = document.createElement('canvas');
   c.width = doc.width * scale; c.height = doc.height * scale;
