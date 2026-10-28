@@ -4,6 +4,7 @@ import type { LinkedSyncSummary } from '../areaLogic';
 import type { ImageAsset } from '../core/part';
 import { boneById } from '../core/rig';
 import { useEditor } from '../state/store';
+import { instanceLabels } from './instanceLabels';
 import { importFiles } from './importFiles';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { LinkSourceDialog } from './LinkSourceDialog';
@@ -142,39 +143,52 @@ export function SpritesPanel() {
       )}
       <ul className="sprite-list">
         {images.map((img) => {
-          const part = project.parts.find((p) => p.imageId === img.id);
-          const bone = part ? boneById(project.rig, part.boneId) : undefined;
+          const parts = project.parts.filter((p) => p.imageId === img.id);
+          const labels = instanceLabels(parts, project.rig);
+          const boneOptions = project.rig.bones.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ));
           return (
             <li key={img.id} data-testid={`sprite-${img.name}`}>
               <img src={img.dataUrl} alt="" width={24} height={24} style={{ objectFit: 'contain' }} />
               <span className="sprite-name">{img.name}</span>
               <LinkMarks img={img} sourceName={img.source ? sourceNames[img.source.projectId] : undefined} />
-              {part ? (
-                <button
-                  className="sprite-bone"
-                  aria-label={`${img.name} auswählen`}
-                  title="Teil auswählen"
-                  aria-pressed={selectedPartId === part.id}
-                  onClick={() => useEditor.getState().select(part.boneId, part.id)}
-                >
-                  {bone?.name ?? '?'}
-                </button>
-              ) : (
-                <select
-                  aria-label={`Bone für ${img.name}`}
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) useEditor.getState().attachImage(img.id, e.target.value);
-                  }}
-                >
-                  <option value="">– nicht angehängt –</option>
-                  {project.rig.bones.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              {parts.map((part, i) => {
+                const boneName = boneById(project.rig, part.boneId)?.name ?? '?';
+                return (
+                  <span key={part.id} className="sprite-instance">
+                    <button
+                      className="sprite-bone"
+                      aria-label={`${img.name} an ${boneName} auswählen`}
+                      title="Teil auswählen"
+                      aria-pressed={selectedPartId === part.id}
+                      onClick={() => useEditor.getState().select(part.boneId, part.id)}
+                    >
+                      {labels[i]}
+                    </button>
+                    <button
+                      className="sprite-instance-remove"
+                      aria-label={`${img.name} von ${boneName} entfernen`}
+                      title="Instanz entfernen (Sprite bleibt)"
+                      onClick={() => useEditor.getState().removePart(part.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+              <select
+                aria-label={parts.length ? `Weiterer Bone für ${img.name}` : `Bone für ${img.name}`}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) useEditor.getState().attachImage(img.id, e.target.value);
+                }}
+              >
+                <option value="">{parts.length ? '+ Bone…' : '– nicht angehängt –'}</option>
+                {boneOptions}
+              </select>
               <button aria-label={`${img.name} entfernen`} onClick={() => useEditor.getState().removeImage(img.id)}>
                 ×
               </button>

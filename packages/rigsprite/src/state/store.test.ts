@@ -55,6 +55,48 @@ describe('editor store', () => {
     expect(useEditor.getState().project.parts.find((p) => p.id === id)!.rotation).toBe(90);
   });
 
+  describe('multiple instances of one image', () => {
+    const parts = () => useEditor.getState().project.parts;
+    function two() {
+      const s = useEditor.getState();
+      s.addImages([img('i1', 'x.png')]);
+      return [s.attachImage('i1', boneId('head')), s.attachImage('i1', boneId('torso'))];
+    }
+    it('attachImage twice creates distinct parts sharing the image', () => {
+      const [a, b] = two();
+      expect(a).not.toBe(b);
+      expect(parts().filter((p) => p.imageId === 'i1').map((p) => p.id)).toEqual([a, b]);
+      expect(parts().find((p) => p.id === b)!.z).toBeGreaterThan(parts().find((p) => p.id === a)!.z);
+    });
+    it('updatePart on one leaves the other untouched', () => {
+      const [a, b] = two();
+      const before = parts().find((p) => p.id === b)!;
+      useEditor.getState().updatePart(a, { x: 77, rotation: 12 });
+      expect(parts().find((p) => p.id === a)).toMatchObject({ x: 77, rotation: 12 });
+      expect(parts().find((p) => p.id === b)).toBe(before);
+    });
+    it('removeImage removes all instances and prunes selection', () => {
+      const [, b] = two();
+      useEditor.getState().select(boneId('torso'), b);
+      useEditor.getState().removeImage('i1');
+      expect(parts().filter((p) => p.imageId === 'i1')).toHaveLength(0);
+      expect(useEditor.getState().selectedPartId).toBeNull();
+    });
+    it('removePart removes one instance and undo brings it back', () => {
+      const [a, b] = two();
+      useEditor.getState().removePart(a);
+      expect(parts().map((p) => p.id)).toEqual([b]);
+      expect(useEditor.getState().project.images['i1']).toBeTruthy();
+      useEditor.temporal.getState().undo();
+      expect(parts().map((p) => p.id)).toEqual([a, b]);
+    });
+    it('undo of the second attach drops only that instance', () => {
+      const [a] = two();
+      useEditor.temporal.getState().undo();
+      expect(parts().filter((p) => p.imageId === 'i1').map((p) => p.id)).toEqual([a]);
+    });
+  });
+
   it('addImages auto-attaches by filename', () => {
     useEditor.getState().addImages([img('i1', 'head.png'), img('i2', 'random.png')]);
     const { project } = useEditor.getState();

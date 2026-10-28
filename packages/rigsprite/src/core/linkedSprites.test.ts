@@ -46,6 +46,18 @@ describe('linkFramesAsImages', () => {
 });
 
 describe('refreshLinkedImages', () => {
+  it('redraw hits all instances of an image: both parts stay referentially unchanged', () => {
+    const { project: p0, added } = linked();
+    const first = p0.parts.find((x) => x.imageId === added[0])!;
+    const second = { ...first, id: 'second', boneId: 'torso', x: first.x + 9, rotation: 42 };
+    const p = { ...p0, parts: [...p0.parts, second] };
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'head', { dataUrl: 'data:image/png;base64,NEW' }), frame(2, 'random')));
+    expect(r.project.images[added[0]].dataUrl).toBe('data:image/png;base64,NEW');
+    expect(r.project.parts).toBe(p.parts);
+    expect(r.project.parts[0]).toBe(first);
+    expect(r.project.parts[r.project.parts.length - 1]).toBe(second);
+  });
+
   it('updates changed pixels while parts stays referentially identical', () => {
     const { project: p, added } = linked();
     const r = refreshLinkedImages(p, PID, src(frame(1, 'head', { dataUrl: 'data:image/png;base64,NEW', width: 12 }), frame(2, 'random')));

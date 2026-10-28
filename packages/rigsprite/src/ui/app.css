@@ -36,6 +36,7 @@ button[aria-pressed="true"] { background: #4a6fa5; }
 .sprite-list li { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
 .sprite-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sprite-bone { opacity: 0.8; }
+.sprite-instance { display: inline-flex; gap: 2px; }
 /* Klexel-Verknüpfung: Knöpfe „Aus Klexel…"/„Aktualisieren", Kennzeichen am Bild, Meldung */
 .sprite-source-actions { display: flex; gap: 4px; margin: 4px 0; flex-wrap: wrap; }
 /* verknüpfte Zeilen sind breiter (Kennzeichen, „Quelle fehlt"): umbrechen statt die Seitenleiste zu sprengen */

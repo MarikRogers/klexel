@@ -26,6 +26,18 @@ function anim(tracks: Animation['tracks']): Animation {
 }
 
 describe('buildFrame', () => {
+  it('two parts of one image give two items with own transforms and the shared imageId', () => {
+    const parts = [makePart('a', 'head'), makePart('b', 'torso', { z: 5 })];
+    const moved = [parts[0], { ...parts[1], x: parts[1].x + 40, rotation: 30 }];
+    const f = buildFrame(input(parts), 0);
+    const g = buildFrame(input(moved), 0);
+    expect(f.items.map((i) => i.imageId)).toEqual(['img', 'img']);
+    expect(f.items.map((i) => i.partId)).toEqual(['a', 'b']);
+    expect(Array.from(g.items[0].positions)).toEqual(Array.from(f.items[0].positions));
+    expect(Array.from(g.items[1].positions)).not.toEqual(Array.from(f.items[1].positions));
+    expect(Array.from(f.items[0].positions)).not.toEqual(Array.from(f.items[1].positions));
+  });
+
   it('softness 0 yields no NaN positions', () => {
     const soft = { ...rig, bones: rig.bones.map((b) => (b.id === 'lowerArm_L' ? { ...b, softness: 0 } : b)) };
     const parts = [makePart('up', 'upperArm_L')];
