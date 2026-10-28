@@ -79,7 +79,10 @@ button[aria-pressed="true"] { background: #4a6fa5; }
 .hint { opacity: 0.6; }
 .dialog-backdrop { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 10; }
 .dialog { background: #2a2c33; padding: 16px; border-radius: 6px; min-width: 260px; }
-.dialog-templates { display: flex; gap: 8px; margin-bottom: 12px; }
+.new-project-dialog { max-width: min(92vw, 560px); box-sizing: border-box; }
+/* Six templates with long names: wrap into rows (one column on phones), finger-sized buttons. */
+.dialog-templates { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.dialog-templates button { flex: 1 1 160px; min-height: 36px; }
 .timeline { overflow: hidden; }
 .timeline-inner { height: 100%; display: flex; flex-direction: column; position: relative; }
 .timeline-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid #111; flex-wrap: wrap; }

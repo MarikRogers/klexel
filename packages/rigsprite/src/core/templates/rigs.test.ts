@@ -143,3 +143,30 @@ describe('front and back view templates', () => {
     expect(tail.y).toBeLessThan(0);
   });
 });
+
+describe('front and back view chains are gapless', () => {
+  // Deliberately attached elsewhere than the parent's tip: shoulders (torso at 30 of 34, offset sideways), hips and
+  // legs (sideways from the root's origin) and the tail (from the middle of the body).
+  const ATTACHED_ELSEWHERE = new Set([
+    'upperArm_L', 'upperArm_R', 'thigh_L', 'thigh_R',
+    'frontUpper_L', 'frontUpper_R', 'backUpper_L', 'backUpper_R', 'tail1',
+  ]);
+  it.each(['humanoid-front', 'humanoid-back', 'quadruped-front', 'quadruped-back'])(
+    '%s: every other child starts at its parent\'s tip',
+    (id) => {
+      const rig = RIG_TEMPLATES.find((t) => t.id === id)!.rig;
+      const world = computeWorldTransforms(rig);
+      const byId = new Map(rig.bones.map((b) => [b.id, b]));
+      let checked = 0;
+      for (const b of rig.bones) {
+        if (b.parentId === null || ATTACHED_ELSEWHERE.has(b.name)) continue;
+        const tip = boneTip(world[b.parentId], byId.get(b.parentId)!);
+        const origin = boneOrigin(world[b.id]);
+        expect(origin.x, `${id}:${b.name}.x`).toBeCloseTo(tip.x, 6);
+        expect(origin.y, `${id}:${b.name}.y`).toBeCloseTo(tip.y, 6);
+        checked++;
+      }
+      expect(checked).toBeGreaterThanOrEqual(id.startsWith('humanoid') ? 10 : 6);
+    },
+  );
+});

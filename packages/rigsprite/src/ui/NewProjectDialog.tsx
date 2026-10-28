@@ -6,7 +6,7 @@ import { useEditor } from '../state/store';
 export function NewProjectDialog({ onClose, onPick }: { onClose: () => void; onPick?: (t: RigTemplateId) => void }) {
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" role="dialog" aria-label="Neues Projekt">
+      <div className="dialog new-project-dialog" role="dialog" aria-label="Neues Projekt">
         <h2>Neues Projekt</h2>
         <p>Rig-Vorlage wählen:</p>
         <div className="dialog-templates">
