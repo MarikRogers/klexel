@@ -1,6 +1,6 @@
 # Suite aus Klexel und Rigsprite mit Workspace – Design
 
-Stand: 2026-10-28 · Projekt: Pixelart-PWA Klexel (`D:\source\repos\klexel`) und Rigsprite (`D:\source\repos\rigsprite`) · Status: Entwurf, wartet auf Freigabe
+Stand: 2026-10-28 · Projekt: Pixelart-PWA Klexel (`D:\source\repos\klexel`) und Rigsprite (`D:\source\repos\rigsprite`) · Status: Freigegeben, umgesetzt (Branches feature/workspace-projekte, feature/suite-rigsprite, feature/suite-austausch)
 
 ## Ziel
 
