@@ -55,3 +55,36 @@ describe('createLayerCache', () => {
     expect(layers([...items], view(180), 6)).not.toBe(back);
   });
 });
+
+describe('orderLayers with part depth', () => {
+  const deep = (partId: string, z: number, depth: number): DrawItem => ({ ...item(partId, z), depth });
+
+  it('draws the part nearer to the camera last in the front view, whatever its z', () => {
+    const layers = orderLayers([deep('near', 0, 5), deep('far', 9, -5), deep('mid', 3, 0)], view(0), 12);
+    expect(layers.map((l) => l.item.partId)).toEqual(['far', 'mid', 'near']);
+  });
+
+  it('draws it first in the back view (the camera looks from behind)', () => {
+    const layers = orderLayers([deep('near', 0, 5), deep('far', 9, -5), deep('mid', 3, 0)], view(180), 12);
+    expect(layers.map((l) => l.item.partId)).toEqual(['near', 'mid', 'far']);
+  });
+
+  it('rounds depths to whole pixels, then the z layer decides', () => {
+    const layers = orderLayers([deep('a', 5, 0.4), deep('b', 1, 0)], view(0), 12);
+    expect(layers.map((l) => l.item.partId)).toEqual(['b', 'a']);
+    const apart = orderLayers([deep('a', 5, 1.6), deep('b', 1, 0)], view(0), 12);
+    expect(apart.map((l) => l.item.partId)).toEqual(['b', 'a']);
+    const behind = orderLayers([deep('a', 5, -1.6), deep('b', 1, 0)], view(0), 12);
+    expect(behind.map((l) => l.item.partId)).toEqual(['a', 'b']);
+  });
+
+  it('adds the part depth to the layer depth', () => {
+    const layers = orderLayers([deep('a', 0, 4), deep('b', 5, 0)], view(0), 12);
+    expect(layers.find((l) => l.item.partId === 'a')!.depth).toBe(-6 + 4);
+    expect(layers.find((l) => l.item.partId === 'b')!.depth).toBe(6);
+  });
+
+  it('items without depth keep the exact old order and depths', () => {
+    expect(orderLayers(items, view(0), 12).map((l) => l.depth)).toEqual([-12, 0, 0, 12]);
+  });
+});

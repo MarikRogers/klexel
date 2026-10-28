@@ -1,3 +1,4 @@
+import { DEPTH_SORT_STEP } from '../core/defaults';
 import type { DrawItem } from '../core/frame';
 import { isBackView, type ViewTransform } from './view';
 
@@ -24,16 +25,24 @@ export function layerDepths(items: DrawItem[], spacing: number): number[] {
   return depthsOf(rank, count, spacing);
 }
 
+/** Part depth in whole sort steps: depths closer than that count as equal. */
+const depthRank = (item: DrawItem) => Math.round((item.depth ?? 0) / DEPTH_SORT_STEP);
+
 /**
- * Draw order of the sprites with their depths: as `items` (z ascending, stable); seen from behind the
- * layers (ranks) are drawn in reverse order, items within one layer keep their order.
+ * Draw order of the sprites with their depths: nearer to the camera is drawn later, then by z layer
+ * (rank), then as `items` (stable). Seen from behind everything is reversed, except that items within one
+ * layer and depth keep their order. Without part depths this is exactly z ascending (reversed layers
+ * from behind). The returned depth is the layer depth plus the part depth.
  */
 export function orderLayers(items: DrawItem[], view: ViewTransform, spacing: number): Layer[] {
   const { rank, count } = ranks(items);
   const depths = depthsOf(rank, count, spacing);
+  const near = items.map(depthRank);
+  const back = isBackView(view);
+  const sign = back ? -1 : 1;
   const order = items.map((_, i) => i);
-  if (isBackView(view)) order.sort((a, b) => rank[b] - rank[a] || a - b);
-  return order.map((i) => ({ item: items[i], depth: depths[i] }));
+  order.sort((a, b) => sign * (near[a] - near[b]) || sign * (rank[a] - rank[b]) || a - b);
+  return order.map((i) => ({ item: items[i], depth: items[i].depth ? depths[i] + items[i].depth! : depths[i] }));
 }
 
 /**

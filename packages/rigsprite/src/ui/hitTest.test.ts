@@ -70,6 +70,12 @@ describe('hitTestPart', () => {
     expect(hitTestPart(orderLayers(items, v, 12), v, at(v, { x: 75, y: 75 }))).toBe('low');
   });
 
+  it('front view: a part with more depth wins over a higher z layer', () => {
+    const v = view(0);
+    const deep = [{ ...quad('near', 0, 0, 100, 100, 0), depth: 6 }, quad('high', 50, 50, 150, 150, 1)];
+    expect(hitTestPart(orderLayers(deep, v, 0), v, at(v, { x: 75, y: 75 }))).toBe('near');
+  });
+
   it('returns the only part containing the point, null outside all parts', () => {
     const v = view(0);
     const layers = orderLayers(items, v, 12);
