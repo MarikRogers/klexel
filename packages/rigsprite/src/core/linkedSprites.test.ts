@@ -145,3 +145,76 @@ describe('refreshLinkedImages', () => {
     expect(refreshLinkedImages(p, PID, null).project).toBe(p);
   });
 });
+
+function deepFreeze<T>(o: T): T {
+  if (o && typeof o === 'object' && !Object.isFrozen(o)) {
+    Object.freeze(o);
+    Object.values(o as object).forEach(deepFreeze);
+  }
+  return o;
+}
+
+describe('refreshLinkedImages: Namens-Sync', () => {
+  const unnamed = () => linked([frame(1, '')]);
+
+  it('(a) unnamed frame gets a name, image still has default name -> takes it', () => {
+    const { project: p, added } = unnamed();
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'Kopf')));
+    expect(r.project.images[added[0]].name).toBe('Kopf');
+    expect(r.project.images[added[0]].source?.name).toBe('Kopf');
+    expect(r.updated).toEqual([]);
+  });
+
+  it('(b) same, but user renamed -> user name stays, source.name is pulled', () => {
+    const { project: p0, added } = unnamed();
+    const p = { ...p0, images: { ...p0.images, [added[0]]: { ...p0.images[added[0]], name: 'Meins' } } };
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'Kopf')));
+    expect(r.project.images[added[0]].name).toBe('Meins');
+    expect(r.project.images[added[0]].source?.name).toBe('Kopf');
+    const again = refreshLinkedImages(r.project, PID, src(frame(1, 'Kopf2')));
+    expect(again.project.images[added[0]].name).toBe('Meins');
+  });
+
+  it('(c) cleared frame name keeps the image name', () => {
+    const { project: p, added } = linked([frame(1, 'head')]);
+    const r = refreshLinkedImages(p, PID, src(frame(1, '')));
+    expect(r.project).toBe(p);
+    expect(p.images[added[0]].name).toBe('head');
+  });
+
+  it('(d) duplicate frameIds: first wins', () => {
+    const { project: p, added } = linked([frame(1, 'head')]);
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'head', { dataUrl: 'data:image/png;base64,A' }), frame(1, 'head', { dataUrl: 'data:image/png;base64,B' })));
+    expect(r.project.images[added[0]].dataUrl).toBe('data:image/png;base64,A');
+    expect(r.added).toEqual([]);
+  });
+
+  it('(e) image of another projectId stays referentially identical', () => {
+    const { project: p0 } = linked([frame(1, 'head')]);
+    const other = { id: 'o', name: 'o', dataUrl: 'data:image/png;base64,O', width: 1, height: 1, source: { projectId: 'zzz', frameId: 1 } };
+    const p = { ...p0, images: { ...p0.images, o: other } };
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'head', { width: 99 })));
+    expect(r.project.images.o).toBe(other);
+  });
+
+  it('(f) does not mutate frozen inputs', () => {
+    const { project, added } = linked([frame(1, 'head'), frame(2, 'x')]);
+    const p = deepFreeze(structuredClone(project));
+    const s = deepFreeze(src(frame(1, 'kopf', { width: 3 }), frame(3, 'upperArm_L')));
+    const snapshot = JSON.stringify(p);
+    const r = refreshLinkedImages(p, PID, s);
+    expect(JSON.stringify(p)).toBe(snapshot);
+    expect(r.updated).toEqual([added[0]]);
+    expect(() => refreshLinkedImages(p, PID, null)).not.toThrow();
+    expect(() => linkFramesAsImages(p, PID, s)).not.toThrow();
+  });
+
+  it('(g) user renamed to exactly the new frame name: name unchanged, no harm', () => {
+    const { project: p0, added } = linked([frame(1, 'head')]);
+    const p = { ...p0, images: { ...p0.images, [added[0]]: { ...p0.images[added[0]], name: 'kopf' } } };
+    const r = refreshLinkedImages(p, PID, src(frame(1, 'kopf')));
+    expect(r.project.images[added[0]].name).toBe('kopf');
+    expect(r.project.images[added[0]].source?.name).toBe('kopf');
+    expect(r.project.parts).toBe(p.parts);
+  });
+});

@@ -16,6 +16,8 @@ export interface SourceResult {
   frames: SourceFrame[];
 }
 
+const DEFAULT_NAME = /^Frame \d+$/;
+
 /** New linked images for the frames of `source` that no image of `projectId` links yet. */
 function newImages(p: Project, projectId: string, source: SourceResult): ImageAsset[] {
   const known = new Set<number>();
@@ -51,7 +53,7 @@ export function linkFramesAsImages(
 
 /**
  * Syncs the images linked to `projectId` with `source` (null = project gone). Identity is the frame id.
- * Parts, animations, settings and rig stay untouched; `project === p` if nothing changed.
+ * `updated` counts only pixel/size changes (not renames). Parts, animations, settings and rig stay untouched; `project === p` if nothing changed.
  */
 export function refreshLinkedImages(
   p: Project,
@@ -90,11 +92,19 @@ export function refreshLinkedImages(
       updated.push(id);
     }
     if (link.missing) {
-      const { missing: _gone, ...rest } = link;
-      next = { ...next, source: rest };
+      next = { ...next, source: { projectId: link.projectId, frameId: link.frameId, name: link.name } };
+      if (link.name === undefined) delete next.source!.name;
     }
-    if (f.name && next.name === (link.name ?? next.name) && (next.name !== f.name || link.name !== f.name)) {
-      next = { ...next, name: f.name, source: { ...next.source!, name: f.name } };
+    // Name sync: the image follows the frame name only if the user did not rename it. "Not renamed" means the
+    // image still carries the name last synced (source.name), or - if the frame had no name at link time -
+    // the default name "Frame <n>". source.name is always pulled to the current frame name (so later syncs
+    // can tell a user rename apart); a cleared frame name changes nothing.
+    if (f.name) {
+      const untouched = link.name !== undefined ? img.name === link.name : DEFAULT_NAME.test(img.name);
+      const name = untouched ? f.name : next.name;
+      if (name !== next.name || next.source?.name !== f.name) {
+        next = { ...next, name, source: { ...next.source!, name: f.name } };
+      }
     }
     if (next !== img) changed = true;
     images[id] = next;
