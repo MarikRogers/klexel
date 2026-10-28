@@ -34,6 +34,11 @@ describe('shortcutsEnabled', () => {
     expect(shortcutsEnabled(true, false)).toBe(false);
     expect(shortcutsEnabled(false, false)).toBe(false);
   });
+
+  it('nicht, solange ein modaler Dialog (der Hülle) offen ist', () => {
+    expect(shortcutsEnabled(true, true, false)).toBe(true);
+    expect(shortcutsEnabled(true, true, true)).toBe(false);
+  });
 });
 
 describe('watchProjectChanges', () => {

@@ -117,6 +117,20 @@ describe('rigspriteArea', () => {
     expect(useEditor.getState().showRig).toBe(!before);
   });
 
+  it('Tastenkürzel ruhen, solange ein modaler Dialog der Hülle offen ist (z. B. die Projektliste)', () => {
+    act(() => handle!.open(createProject('humanoid')));
+    const before = useEditor.getState().showRig;
+    const dlg = document.createElement('dialog');
+    dlg.setAttribute('open', '');
+    document.body.appendChild(dlg);
+    try {
+      act(() => void key('KeyH'));
+      expect(useEditor.getState().showRig).toBe(before);
+    } finally { dlg.remove(); }
+    act(() => void key('KeyH'));
+    expect(useEditor.getState().showRig).toBe(!before);
+  });
+
   it('Strg+Z wirkt nicht, solange der Bereich inaktiv ist', () => {
     act(() => handle!.open(createProject('humanoid')));
     act(() => useEditor.getState().setProjectName('geändert'));

@@ -4,9 +4,12 @@ import { refreshLinkedImages } from './core/linkedSprites';
 import type { Project } from './core/project';
 import type { Transaction } from './state/store';
 
-/** Laufen die globalen Tastenkürzel? Nur, wenn der Bereich aktiv ist und die Hülle ihn gerade bedienbar hält. */
-export function shortcutsEnabled(active: boolean, hostActive: boolean): boolean {
-  return active && hostActive;
+/**
+ * Laufen die globalen Tastenkürzel? Nur, wenn der Bereich aktiv ist, die Hülle ihn gerade bedienbar hält und kein
+ * modaler Dialog offen ist (Projektliste und Rückfragen der Hülle sind <dialog>; wie Klexel).
+ */
+export function shortcutsEnabled(active: boolean, hostActive: boolean, dialogOpen = false): boolean {
+  return active && hostActive && !dialogOpen;
 }
 
 interface ProjectState {

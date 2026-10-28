@@ -46,7 +46,8 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
   let destroyed = false;
   // Beim Öffnen durch die Hülle keine Änderung melden (der Stand kommt ja gerade aus dem Speicher)
   let opening = false;
-  const resetGate = setShortcutGate(() => shortcutsEnabled(active, host.isActive()));
+  const resetGate = setShortcutGate(() =>
+    shortcutsEnabled(active, host.isActive(), document.querySelector('dialog[open]') !== null));
   const stopWatch = watchProjectChanges(useEditor, () => {
     if (!opening) host.onChange();
   });
