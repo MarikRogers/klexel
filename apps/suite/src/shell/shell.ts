@@ -273,7 +273,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
    * Bereich wird geladen. Lässt sich ein Bereich nicht laden (z. B. Chunk offline nicht abrufbar), werden Projekte
    * anderer Arten versucht, zuletzt ein leeres Projekt eines ladbaren Bereichs. Wirft nie: die Hülle bleibt bedienbar.
    * prefer = Bereich eines Links in der Adresse (handlesHash): zuerst dessen Projekte, sonst ein leeres davon, erst
-   * danach andere Arten (ein frisch eingehängter Bereich liest den Link beim Einhängen selbst).
+   * danach andere Arten (ein frisch eingehängter Bereich liest den Link selbst, sobald er aktiv ist).
    */
   async function openAtStart(prefer?: AreaDescriptor<unknown>): Promise<void> {
     const failed = new Set<string>();
@@ -447,8 +447,9 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
 
   /**
    * Link in der Adresse (hashchange): zum Bereich des Links wechseln wie der Umschalter (eingereiht, vorher sichern),
-   * dann behandelt der Bereich den Link. Ein frisch eingehängter Bereich liest ihn beim Einhängen; ein schon
-   * eingehängter war verdeckt und hat den hashchange verpasst → followLink() nach dem Wechsel. Ist der Bereich schon
+   * dann behandelt der Bereich den Link. Ein frisch eingehängter Bereich liest ihn, sobald er aktiv ist (Ende des
+   * Wechsels); ein schon eingehängter beachtet hashchange nur aktiv, war hier also verdeckt oder im Wechsel →
+   * followLink() nach dem Wechsel. Scheitert der Wechsel, öffnet niemand einen Dialog. Ist der Bereich schon
    * sichtbar und bedienbar, behandelt er den Link selbst (eigener hashchange). Andere #-Teile: nichts.
    */
   async function followHash(): Promise<void> {

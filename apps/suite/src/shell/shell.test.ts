@@ -499,6 +499,39 @@ describe('startShell: geteilter Link in der Adresse (handlesHash)', () => {
     expect(K.host!.isActive()).toBe(true); // erst nach dem Wechsel gerufen: bedienbar
   });
 
+  it('Wechsel zum Link scheitert (Speichern wirft): kein Dialog im verdeckten Klexel, Rigsprite bleibt bedienbar', async () => {
+    withLinks();
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    await shell.switchArea('rigsprite');
+    // Wie Klexel: eigener hashchange nur, wenn die Hülle den Bereich freigibt (host.isActive)
+    const onHash = () => {
+      if (!K.host!.isActive()) return;
+      const dlg = document.createElement('dialog');
+      dlg.setAttribute('open', '');
+      container('klexel').append(dlg);
+    };
+    window.addEventListener('hashchange', onHash);
+    R.content = { kind: 'rigsprite', v: 9 }; // ungesichert → Wechsel muss sichern
+    const spy = vi.spyOn(WorkspaceStore.prototype, 'save').mockRejectedValue(new Error('voll'));
+    try {
+      await changeHash('i=xyz');
+    } finally { spy.mockRestore(); window.removeEventListener('hashchange', onHash); }
+    expect(document.querySelector('dialog[open]')).toBeNull();
+    expect(K.followLink).not.toHaveBeenCalled();
+    expect(container('klexel').hidden).toBe(true);
+    expect(container('rigsprite').hidden).toBe(false);
+    expect(container('rigsprite').inert).toBe(false);
+    expect(R.host!.isActive()).toBe(true);
+    expect(K.host!.isActive()).toBe(false);
+    const toast = document.querySelector('.toast')!;
+    expect(toast.textContent).toBe('Speichern fehlgeschlagen – Projekt nicht gewechselt');
+    expect(toast.parentElement).toBe(document.body);
+    expect(await store.lastOpened()).toBe(r.id);
+  });
+
   it('Link bei sichtbarem Klexel: die Hülle tut nichts (Klexel behandelt seinen hashchange selbst)', async () => {
     withLinks();
     const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });

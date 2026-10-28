@@ -24,6 +24,7 @@ import { createPhotoDialog } from './ui/photoDialog';
 import { createShareDialog } from './ui/shareDialog';
 import { createLinkOpenDialog } from './ui/linkOpenDialog';
 import { readShareLink } from './share/link';
+import { createLinkGate } from './share/linkGate';
 import { Selection } from './model/Selection';
 import { SelectionSession, undoAction, type Floating } from './edit/SelectionSession';
 import { wandSelect } from './edit/wand';
@@ -648,8 +649,12 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
     showToast(LINK_ERRORS[r.error], 4000);
     clearHash();
   }
-  listen(window, 'hashchange', () => { void openLinkFromHash(); });
-  void openLinkFromHash();
+  // Nur im aktiven Bereich lesen (isActive: Klexel aktiv UND die Hülle gibt ihn frei, also sichtbar und kein Wechsel):
+  // sonst läge der modale Dialog im verdeckten/inerten #app. Verdeckt wechselt die Hülle bei einem Link selbst und
+  // ruft danach followLink(); ein Einhängen während eines Wechsels liest erst bei setActive(true).
+  const linkGate = createLinkGate(isActive, () => { void openLinkFromHash(); });
+  listen(window, 'hashchange', () => linkGate.hashChanged()); // listen gated zusätzlich mit isActive
+  linkGate.mounted();
 
   return {
     open(payload) {
@@ -669,11 +674,13 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
       }
     },
     flush: flushSave,
-    // Die Hülle hat wegen eines Links zu Klexel gewechselt, während Klexel verdeckt war (hashchange verpasst)
-    followLink: () => { void openLinkFromHash(); },
+    // Die Hülle ist wegen eines Links zu Klexel gewechselt, während Klexel verdeckt war: Klexel hat den hashchange
+    // dann bewusst nicht beachtet (nur im aktiven Bereich); jetzt, nach dem Wechsel, lesen
+    followLink: () => linkGate.follow(),
     setActive(on) {
       active = on;
       if (on && resizedWhileInactive) { resizedWhileInactive = false; view.fit(); refresh(); }
+      if (on) linkGate.activated();
     },
     destroy() {
       active = false;

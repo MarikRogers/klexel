@@ -49,7 +49,8 @@ export interface AreaHandle<P> {
   destroy(): void;
   /**
    * Den Link im #-Teil der Adresse jetzt behandeln (AreaDescriptor.handlesHash): Die Hülle hat deswegen zu diesem
-   * schon eingehängten Bereich gewechselt, während er verdeckt war und den hashchange nicht beachtet hat. Aufruf
+   * schon eingehängten Bereich gewechselt. Ein Bereich behandelt hashchange nur, solange er aktiv ist (sonst läge ein
+   * modaler Dialog im verdeckten Container); verdeckt oder während des Wechsels übernimmt die Hülle und ruft dies
    * erst nach dem Wechsel (Bereich aktiv). Mehrfache Aufrufe dürfen keinen zweiten Dialog öffnen.
    */
   followLink?(): void;

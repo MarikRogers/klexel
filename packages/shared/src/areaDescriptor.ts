@@ -49,7 +49,7 @@ export interface AreaDescriptor<P> {
   /**
    * Gehört der #-Teil der Adresse (z. B. ein geteilter Link) zu diesem Bereich? Leicht und DOM-frei (nur erkennen,
    * nicht lesen). Die Hülle öffnet dann beim Start und bei hashchange diesen Bereich (zuletzt geändertes lesbares
-   * Projekt, sonst ein leeres); den Link selbst behandelt der Bereich: beim Einhängen liest er die Adresse selbst,
+   * Projekt, sonst ein leeres); den Link selbst behandelt der Bereich: beim Einhängen liest er die Adresse selbst (sobald er aktiv ist),
    * war er schon eingehängt (verdeckt), ruft die Hülle nach dem Wechsel AreaHandle.followLink(). Die Hülle ändert
    * den #-Teil nie.
    */
