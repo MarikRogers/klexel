@@ -33,6 +33,7 @@ export function compositeLayers(layers: readonly CompositeLayer[], length: numbe
   for (const layer of layers) {
     if (!layer.visible || layer.opacity === 0) continue;
     const data = layer.cel;
+    // Klexel-Cels sind immer width*height lang; die Prüfung dient nur als Absicherung.
     if (!data || data.length !== length) continue;
     const opaque = layer.opacity === 100;
     for (let i = 0; i < length; i++) {

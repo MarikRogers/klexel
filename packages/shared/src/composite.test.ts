@@ -30,4 +30,15 @@ describe('compositeLayers', () => {
       expect(r[i]).toBe(B[i] === 0 ? base : blendOver(base, B[i], 50));
     }
   });
+  it('drei sichtbare Ebenen stimmen mit einer Referenzschleife auf Basis von blendOver überein', () => {
+    const C = new Uint32Array([0x80808080, 0xff00ffff, 0x01020304, 0]);
+    const layers = [
+      { visible: true, opacity: 100, cel: A },
+      { visible: true, opacity: 50, cel: B },
+      { visible: true, opacity: 33, cel: C },
+    ];
+    const expected = new Uint32Array(4);
+    for (const l of layers) for (let i = 0; i < 4; i++) if (l.cel[i] !== 0) expected[i] = blendOver(expected[i], l.cel[i], l.opacity);
+    expect([...compositeLayers(layers, 4)]).toEqual([...expected]);
+  });
 });
