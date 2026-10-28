@@ -1,5 +1,6 @@
 import type { ProjectMeta } from '@suite/shared';
-import { defaultNewKind, filterProjects, formatUpdated, kindBadge, parseSize, projectBadges, showKindChoice } from './listModel';
+import { MAX_IMAGE_SIZE } from '@suite/shared';
+import { NEW_PROJECT_SIZE, defaultNewKind, filterProjects, formatUpdated, kindBadge, parseSize, projectBadges, showKindChoice } from './listModel';
 
 export interface ProjectListDeps {
   list(): Promise<ProjectMeta[]>;
@@ -190,16 +191,16 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
   }
 
   async function newDialog(): Promise<void> {
-    const mk = (text: string) => {
+    const mk = (text: string, value: number) => {
       const label = el('label', '', text);
       const input = el('input');
-      input.type = 'number'; input.min = '1'; input.max = '128'; input.step = '1'; input.value = '32';
+      input.type = 'number'; input.min = '1'; input.max = String(MAX_IMAGE_SIZE); input.step = '1'; input.value = String(value);
       input.inputMode = 'numeric';
       label.append(input);
       return { label, input };
     };
-    const w = mk('Breite'), h = mk('Höhe');
-    const hint = el('p', 'pl-hint', '1 bis 128 Pixel');
+    const w = mk('Breite', NEW_PROJECT_SIZE.width), h = mk('Höhe', NEW_PROJECT_SIZE.height);
+    const hint = el('p', 'pl-hint', `1 bis ${MAX_IMAGE_SIZE} Pixel`);
     let kind = defaultNewKind(deps.currentKind(), kindIds) ?? '';
     const sized = () => deps.kinds.find(k => k.kind === kind)?.sized ?? false;
     const sizeFields = [w.label, h.label, hint];
@@ -234,7 +235,7 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
       validate: () => { const v = valid(); hint.classList.toggle('error', !v); return v; },
     });
     if (!ok || !valid()) return;
-    const [width, height] = sized() ? [parseSize(w.input.value)!, parseSize(h.input.value)!] : [32, 32];
+    const [width, height] = sized() ? [parseSize(w.input.value)!, parseSize(h.input.value)!] : [NEW_PROJECT_SIZE.width, NEW_PROJECT_SIZE.height];
     await act(async () => { await deps.create(kind, width, height); dlg.close(); });
   }
 

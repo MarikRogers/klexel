@@ -22,4 +22,13 @@ export interface AreaDescriptor<P> {
   legacyName?: string;
   /** Fragt „Neues Projekt" in der Projektliste nach Breite und Höhe? (Klexel ja, Rigsprite nein) */
   newProjectSize?: boolean;
+  /**
+   * Wartezeit der Hülle zwischen einer Änderungsmeldung (onChange) und dem Sichern. Bereiche, die jede kleine
+   * Änderung sofort melden (Rigsprite), drosseln so die vollen Speichervorgänge; flush/Wechsel/Schließen sichern sofort.
+   * Ohne Angabe: DEFAULT_AUTOSAVE_DELAY_MS (für Bereiche, die selbst schon entprellt melden, wie Klexel).
+   */
+  autosaveDelayMs?: number;
 }
+
+/** Standard-Wartezeit des Autosaves der Hülle (Klexel meldet bereits entprellt, 500 ms). */
+export const DEFAULT_AUTOSAVE_DELAY_MS = 50;

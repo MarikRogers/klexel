@@ -12,6 +12,7 @@ describe('rigspriteDescriptor', () => {
     expect(d.marker).toBe(AREA_MARKER);
     expect(d.readLegacy).toBeUndefined();
     expect(d.newProjectSize).toBeFalsy();
+    expect(d.autosaveDelayMs).toBe(500);
   });
 
   it('blank: lesbares Humanoid-Projekt, Größe wird ignoriert', () => {

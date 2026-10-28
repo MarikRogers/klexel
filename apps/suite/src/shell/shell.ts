@@ -4,11 +4,11 @@
 // Jeder Bereich wird beim ersten Projekt seiner Art in einen eigenen Container eingehängt (Klexel: #app, weitere:
 // #area-<art> daneben) und bleibt danach eingehängt; sichtbar und aktiv ist nur der Bereich des offenen Projekts.
 import './shell.css';
-import type { AreaDescriptor, AreaHandle, AreaHost, NewProjectInit, ProjectMeta } from '@suite/shared';
-import { WorkspaceStore, IdbBackend, migrateLegacy } from '@suite/shared';
+import type { AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, ProjectMeta } from '@suite/shared';
+import { WorkspaceStore, IdbBackend, migrateLegacy, DEFAULT_AUTOSAVE_DELAY_MS } from '@suite/shared';
 import { showToast } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
-import { nextUntitledName, afterRemoveError, isOpenable } from './listModel';
+import { nextUntitledName, afterRemoveError, isOpenable, NEW_PROJECT_SIZE } from './listModel';
 import { createProjectList } from './projectList';
 import { createFileActions } from './fileMenu';
 
@@ -17,7 +17,12 @@ export interface Shell {
   switchProject(id: string): Promise<void>;
 }
 
-const BLANK: NewProjectInit = { width: 32, height: 32 };
+const BLANK: NewProjectInit = NEW_PROJECT_SIZE;
+
+export interface ShellOptions {
+  /** Speicher des Workspace (Standard: IndexedDB; Tests: MemoryBackend) */
+  backend?: KvBackend;
+}
 
 /** Ein Bereich dieses Builds: Beschreibung, Container und (nach dem ersten Öffnen) der eingehängte Editor. */
 interface Slot {
@@ -32,7 +37,7 @@ interface Slot {
  * leeres Workspace). Projekte von Arten ohne Bereich bleiben erhalten und sind in der Liste „nicht verfügbar".
  * app ist der Container von Klexel (seine Bedienelemente suchen #app/#bottom); weitere Bereiche bekommen Geschwister.
  */
-export async function startShell(app: HTMLElement, descriptors: readonly AreaDescriptor<unknown>[]): Promise<Shell> {
+export async function startShell(app: HTMLElement, descriptors: readonly AreaDescriptor<unknown>[], opts: ShellOptions = {}): Promise<Shell> {
   const first = descriptors[0];
   if (!first) throw new Error('Kein Bereich in diesem Build enthalten');
   const kinds = descriptors.map(d => d.kind);
@@ -52,10 +57,10 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     slots.set(d.kind, { d, el });
   }
   const slot = (kind: string) => slots.get(kind)!;
-  // Editor des ersten Bereichs schon laden, während der Workspace gelesen wird (eigener Chunk; nur laden)
-  first.load().catch(() => undefined); // Fehler erst beim Einhängen melden
+  // Kein Vorab-Laden: welcher Bereich gebraucht wird, steht erst nach dem Lesen des Workspace fest (ein Bereich
+  // brächte sonst Chunk und globale Styles mit, auch wenn das offene Projekt einer anderen Art ist)
 
-  const kv = new IdbBackend();
+  const kv = opts.backend ?? new IdbBackend();
   const store = new WorkspaceStore(kv);
 
   // Alt-Stände nur der Bereiche dieses Builds (ohne Klexel keine Klexel-Übernahme)
@@ -68,28 +73,20 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     }
   }
 
-  // Erst den Stand laden, dann einhängen, dann öffnen (der Link-Dialog prüft beim Einhängen)
+  // Erst den Stand lesen, dann nur den passenden Bereich einhängen und öffnen (der Link-Dialog prüft beim Einhängen)
   let currentId: string | null = null;
   let currentKind: string | null = null;
-  let initial: { id: string; kind: string; payload: unknown; hasThumbnail: boolean } | null = null;
+  let storeOk = true;
+  let metas: ProjectMeta[] = [];
+  let order: ProjectMeta[] = [];
   try {
     const last = await store.lastOpened();
-    const metas = (await store.list()).filter(canOpen);
-    // Zuletzt geöffnetes zuerst (dessen Bereich wird zuerst eingehängt), sonst das zuletzt geänderte;
-    // Unlesbares wird übersprungen
-    const order = [...metas.filter(m => m.id === last), ...metas.filter(m => m.id !== last)];
-    for (const m of order) {
-      const payload = byKind(m.kind)!.decode(await store.load(m.id));
-      if (payload !== null) { initial = { id: m.id, kind: m.kind, payload, hasThumbnail: !!m.thumbnail }; break; }
-      console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`);
-    }
-    if (!initial) {
-      const payload = first.blank(BLANK);
-      const meta = await store.create(first.kind, nextUntitledName(metas.map(m => m.name)), payload);
-      initial = { id: meta.id, kind: first.kind, payload, hasThumbnail: false };
-    }
+    metas = (await store.list()).filter(canOpen);
+    // Zuletzt geöffnetes zuerst (nur dessen Bereich wird eingehängt), sonst das zuletzt geänderte
+    order = [...metas.filter(m => m.id === last), ...metas.filter(m => m.id !== last)];
   } catch (err) {
     // Ohne Speicher trotzdem bedienbar bleiben (Änderungen gehen dann beim Schließen verloren)
+    storeOk = false;
     console.error('Workspace nicht lesbar', err);
     showToast('Projekte konnten nicht geladen werden', 4000);
   }
@@ -97,14 +94,18 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
   let switching = false;
   // Zuletzt gesicherter (oder geöffneter) Stand des offenen Projekts
   let saved: { id: string; key: string } | null = null;
+  // Projekte, für die der Bereich in dieser Sitzung keine Vorschau liefern konnte: beim Öffnen nicht erneut nur
+  // für die Vorschau schreiben (das Datum spränge sonst bei jedem Öffnen nach vorn)
+  const noThumbnail = new Set<string>();
   let list: ReturnType<typeof createProjectList> | undefined;
   const current = (): Slot | undefined => (currentKind === null ? undefined : slots.get(currentKind));
   const currentHandle = () => current()?.handle;
 
   const autosave = createAutosave({
-    // Klexel meldet Änderungen bereits entprellt (500 ms); hier nur kurz bündeln, damit das Fenster bis zum
-    // Schreiben klein bleibt (beim Neuladen/Schließen bricht der Browser offene IndexedDB-Aufträge ab)
-    delayMs: 50,
+    // Je Bereich (AreaDescriptor.autosaveDelayMs): Klexel meldet bereits entprellt (500 ms) → nur kurz bündeln (50 ms),
+    // damit das Fenster bis zum Schreiben klein bleibt (beim Neuladen/Schließen bricht der Browser offene
+    // IndexedDB-Aufträge ab); Rigsprite meldet jede Änderung → gedrosselt. flush/Wechsel/pagehide sichern sofort.
+    delayMs: () => current()?.d.autosaveDelayMs ?? DEFAULT_AUTOSAVE_DELAY_MS,
     save: async () => {
       const id = currentId;
       const s = current();
@@ -117,6 +118,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       if (saved?.id === id && saved.key === key) return;
       const thumbnail = s.handle.thumbnail();
       await store.save(id, payload, thumbnail ? { thumbnail } : undefined);
+      if (thumbnail) noThumbnail.delete(id); else noThumbnail.add(id);
       saved = { id, key };
       list?.refresh();
     },
@@ -161,8 +163,11 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       if (k === kind) continue;
       s.handle?.setActive(false);
       s.el.hidden = true;
+      s.el.inert = true;
     }
-    slot(kind).el.hidden = false;
+    const target = slot(kind).el;
+    target.hidden = false;
+    target.inert = switching; // während eines Wechsels erst an dessen Ende bedienbar
   }
 
   /**
@@ -184,18 +189,59 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     reveal(kind);
     h.open(payload);
     currentId = id;
-    saved = hasThumbnail ? { id, key: slot(kind).d.changeKey(h.snapshot()) } : null;
+    saved = hasThumbnail || noThumbnail.has(id) ? { id, key: slot(kind).d.changeKey(h.snapshot()) } : null;
   }
 
-  if (initial) {
-    await show(initial.id, initial.kind, initial.payload, initial.hasThumbnail);
-    void store.setLastOpened(initial.id).catch(err => console.error(err));
-  } else {
-    // Ohne Speicher: den ersten Bereich leer zeigen
-    currentKind = first.kind;
-    await ensureMounted(first.kind);
-    reveal(first.kind);
+  /**
+   * Erstes Projekt öffnen: das zuletzt geöffnete bzw. nächste lesbare (Unlesbares wird übersprungen); nur dessen
+   * Bereich wird geladen. Lässt sich ein Bereich nicht laden (z. B. Chunk offline nicht abrufbar), werden Projekte
+   * anderer Arten versucht, zuletzt ein leeres Projekt eines ladbaren Bereichs. Wirft nie: die Hülle bleibt bedienbar.
+   */
+  async function openAtStart(): Promise<void> {
+    const failed = new Set<string>();
+    for (const m of order) {
+      if (failed.has(m.kind)) continue;
+      let payload: unknown;
+      try { payload = byKind(m.kind)!.decode(await store.load(m.id)); } catch (err) {
+        console.error(`Projekt ${m.id} konnte nicht gelesen werden`, err);
+        continue;
+      }
+      if (payload === null) { console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`); continue; }
+      try {
+        await show(m.id, m.kind, payload, !!m.thumbnail);
+        void store.setLastOpened(m.id).catch(err => console.error(err));
+        return;
+      } catch (err) {
+        console.error(`Bereich ${m.kind} konnte nicht geladen werden`, err);
+        failed.add(m.kind);
+      }
+    }
+    // Kein öffenbares Projekt: ein leeres der ersten ladbaren Art (Reihenfolge der Bereiche)
+    for (const d of descriptors) {
+      if (failed.has(d.kind)) continue;
+      try { await ensureMounted(d.kind); } catch (err) {
+        console.error(`Bereich ${d.kind} konnte nicht geladen werden`, err);
+        failed.add(d.kind);
+        continue;
+      }
+      try {
+        if (!storeOk) throw new Error('Workspace nicht lesbar');
+        const payload = d.blank(BLANK);
+        const meta = await store.create(d.kind, nextUntitledName(metas.map(m => m.name)), payload);
+        await show(meta.id, d.kind, payload, false);
+        void store.setLastOpened(meta.id).catch(err => console.error(err));
+      } catch (err) {
+        // Ohne Speicher: den Bereich leer zeigen (Änderungen gehen beim Schließen verloren)
+        if (storeOk) console.error('Leeres Projekt konnte nicht angelegt werden', err);
+        currentKind = d.kind;
+        reveal(d.kind);
+      }
+      return;
+    }
+    showToast('Kein Bereich konnte geladen werden', 6000);
   }
+
+  await openAtStart();
   currentHandle()?.setActive(true);
 
   // Eine Warteschlange für alles, was das offene Projekt austauscht oder löscht
@@ -204,9 +250,13 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     const run = queue.then(async () => {
       switching = true;
       document.body.classList.add('shell-busy');
+      // Keine Eingaben in die Bereiche (auch keine Tastatur in Feldern), solange gewechselt wird
+      for (const s of slots.values()) s.el.inert = true;
       try { return await fn(); } finally {
         switching = false;
         document.body.classList.remove('shell-busy');
+        const cur = current();
+        if (cur && !cur.el.hidden) cur.el.inert = false;
         currentHandle()?.setActive(true); // vorgemerkte Größenänderung nachholen
       }
     });

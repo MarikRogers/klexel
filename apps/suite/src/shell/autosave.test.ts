@@ -116,4 +116,25 @@ describe('createAutosave', () => {
     expect(save).not.toHaveBeenCalled();
     expect(a.pending()).toBe(false);
   });
+
+  it('Wartezeit als Funktion: je schedule() neu gelesen (z. B. je Bereich)', async () => {
+    const save = vi.fn(async () => {});
+    let delay = 50;
+    const a = createAutosave({ save, delayMs: () => delay });
+    a.schedule();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(save).toHaveBeenCalledTimes(1);
+    delay = 500;
+    a.schedule();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(save).toHaveBeenCalledTimes(1);
+    a.schedule(); // weitere Änderung schiebt das Sichern hinaus (Drosselung)
+    await vi.advanceTimersByTimeAsync(499);
+    expect(save).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(save).toHaveBeenCalledTimes(2);
+    a.schedule();
+    await a.flush(); // flush bleibt sofort
+    expect(save).toHaveBeenCalledTimes(3);
+  });
 });

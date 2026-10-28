@@ -9,3 +9,4 @@ export type { WorkspaceFile, ImportResult } from './workspace/file';
 export type { Area, AreaHandle, AreaHost, NewProjectInit } from './area';
 export { MAX_IMAGE_SIZE } from './area';
 export type { AreaDescriptor } from './areaDescriptor';
+export { DEFAULT_AUTOSAVE_DELAY_MS } from './areaDescriptor';

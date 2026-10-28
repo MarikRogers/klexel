@@ -1,6 +1,9 @@
 import { MAX_IMAGE_SIZE } from '@suite/shared';
 import type { ProjectMeta } from '@suite/shared';
 
+/** Größe eines neuen Projekts ohne eigene Angabe (und Vorgabe im Dialog „Neues Projekt"). */
+export const NEW_PROJECT_SIZE = { width: 32, height: 32 } as const;
+
 /** „Unbenannt", sonst die kleinste freie Nummer („Unbenannt 2", …). */
 export function nextUntitledName(existing: string[], base = 'Unbenannt'): string {
   const names = new Set(existing);

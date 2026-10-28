@@ -1,8 +1,8 @@
 export interface AutosaveOptions {
   /** Schreibt den aktuellen Stand (liest ihn selbst beim Aufruf) */
   save: () => Promise<void>;
-  /** Wartezeit nach der letzten Änderung (Standard 400 ms) */
-  delayMs?: number;
+  /** Wartezeit nach der letzten Änderung (Standard 400 ms); als Funktion je schedule() neu gelesen (z. B. je Bereich) */
+  delayMs?: number | (() => number);
   /** Wird bei jedem gescheiterten Schreibvorgang aufgerufen (Standard: console.error) */
   onError?: (err: unknown) => void;
 }
@@ -20,7 +20,7 @@ export interface Autosave {
 
 /** Entprelltes Speichern; Schreibvorgänge laufen nie parallel. Nach einem Fehler bleibt die Änderung offen. */
 export function createAutosave(opts: AutosaveOptions): Autosave {
-  const delay = opts.delayMs ?? 400;
+  const delay = (): number => (typeof opts.delayMs === 'function' ? opts.delayMs() : opts.delayMs ?? 400);
   const report = opts.onError ?? (err => console.error(err));
   let timer: ReturnType<typeof setTimeout> | null = null;
   let dirty = false;
@@ -48,7 +48,7 @@ export function createAutosave(opts: AutosaveOptions): Autosave {
     schedule() {
       dirty = true;
       clearTimer();
-      timer = setTimeout(() => { timer = null; write().catch(() => undefined); }, delay);
+      timer = setTimeout(() => { timer = null; write().catch(() => undefined); }, delay());
     },
     flush() {
       clearTimer();
