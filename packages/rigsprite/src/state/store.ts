@@ -24,6 +24,7 @@ import {
   type Project,
   type ProjectSettings,
 } from '../core/project';
+import { carryLinkedUpdate, linkFramesAsImages, type SourceResult } from '../core/linkedSprites';
 import { addImagesAutoAttach, removeBoneCascade, withSpriteAxis } from '../core/projectOps';
 import {
   boneById,
@@ -89,6 +90,18 @@ export interface EditorState {
   endEditGroup(revert?: boolean): void;
 
   addImages(images: ImageAsset[]): void;
+  /**
+   * Links the frames of a Klexel project as new images (auto-attached by name). A normal edit: one undo entry.
+   * Returns the ids of the added images (empty if every frame is linked already).
+   */
+  linkSource(projectId: string, source: SourceResult): string[];
+  /**
+   * Sets the result of refreshing linked images (computed on the current project) WITHOUT an undo entry:
+   * refreshing mirrors Klexel and is not a user edit here, so undo must neither revert it nor bring stale pixels
+   * back. The update is therefore also carried into every history entry (and an open transaction / edit group),
+   * see carryLinkedUpdate. The change is still reported like any other (autosave). No-op if unchanged.
+   */
+  applyLinkedUpdate(project: Project): void;
   attachImage(imageId: string, boneId: string): string;
   updatePart(id: string, patch: Partial<Omit<Part, 'id'>>): void;
   removePart(id: string): void;
@@ -284,6 +297,29 @@ export const useEditor = create<EditorState>()(
         },
 
         addImages: (images) => patchProject((p) => addImagesAutoAttach(p, images)),
+        linkSource: (projectId, source) => {
+          const r = linkFramesAsImages(get().project, projectId, source);
+          if (r.added.length) set({ project: r.project });
+          return r.added;
+        },
+        applyLinkedUpdate: (project) => {
+          const before = get().project;
+          if (project === before) return;
+          const carry = (q: Project) => (q === before ? project : carryLinkedUpdate(q, before, project));
+          const h = history();
+          // Paused already during a transaction / edit group: leave that pause in place.
+          const tracking = h.isTracking;
+          if (tracking) h.pause();
+          if (editGroupStart) editGroupStart = carry(editGroupStart);
+          set((s) => ({
+            project,
+            transaction: s.transaction ? { startProject: carry(s.transaction.startProject) } : null,
+          }));
+          const carryStates = (states: Partial<{ project: Project }>[]) =>
+            states.map((st) => (st.project ? { ...st, project: carry(st.project) } : st));
+          useEditor.temporal.setState({ pastStates: carryStates(h.pastStates), futureStates: carryStates(h.futureStates) });
+          if (tracking) h.resume();
+        },
         attachImage: (imageId, boneId) => {
           const { project } = get();
           const image = project.images[imageId];

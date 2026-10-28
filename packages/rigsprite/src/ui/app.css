@@ -36,6 +36,23 @@ button[aria-pressed="true"] { background: #4a6fa5; }
 .sprite-list li { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
 .sprite-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sprite-bone { opacity: 0.8; }
+/* Klexel-Verknüpfung: Knöpfe „Aus Klexel…"/„Aktualisieren", Kennzeichen am Bild, Meldung */
+.sprite-source-actions { display: flex; gap: 4px; margin: 4px 0; flex-wrap: wrap; }
+/* verknüpfte Zeilen sind breiter (Kennzeichen, „Quelle fehlt"): umbrechen statt die Seitenleiste zu sprengen */
+.sprite-list li { flex-wrap: wrap; }
+.sprite-list li .sprite-name { min-width: 3.5em; }
+.sprite-link { flex: none; opacity: 0.75; cursor: help; }
+.sprite-missing { flex: none; font-size: 11px; padding: 0 4px; border-radius: 3px; background: #6b2a2a; color: #ffd0d0; white-space: nowrap; }
+.sprite-message { margin: 4px 0; opacity: 0.85; }
+.link-source-dialog { min-width: 300px; max-width: min(92vw, 460px); max-height: 85vh; overflow-y: auto; }
+.link-source-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.link-source-item { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.link-source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-source-date { flex: none; opacity: 0.7; font-size: 12px; }
+.link-source-dialog .dialog-actions button { min-height: 44px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .link-source-item, .link-source-dialog .dialog-actions button { min-height: 40px; }
+}
 .error { color: #ff8a8a; margin: 4px 0; }
 /* Floating "Ansicht" panel (orbit presets / steps, layer spacing) in the viewport's top right corner. */
 .orbit-panel { position: absolute; top: 8px; right: 8px; z-index: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: #2a2c33e6; border: 1px solid #444; border-radius: 4px; touch-action: none; user-select: none; }

@@ -3,8 +3,9 @@
 import './ui/app.css';
 import { createRoot } from 'react-dom/client';
 import type { Area, AreaHandle, AreaHost } from '@suite/shared';
+import { showToast } from '@suite/shared/ui';
 import type { Project } from './core/project';
-import { shortcutsEnabled, watchProjectChanges } from './areaLogic';
+import { shortcutsEnabled, syncLinkedSources, watchProjectChanges, type LinkedSyncSummary } from './areaLogic';
 import { AREA_MARKER } from './marker';
 import { useEditor } from './state/store';
 import { AppView } from './ui/App';
@@ -42,16 +43,48 @@ export function thumbnailOf(layers: readonly HTMLCanvasElement[] | null, max = T
  */
 export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Project> {
   let active = true;
+  let destroyed = false;
   // Beim Öffnen durch die Hülle keine Änderung melden (der Stand kommt ja gerade aus dem Speicher)
   let opening = false;
   const resetGate = setShortcutGate(() => shortcutsEnabled(active, host.isActive()));
   const stopWatch = watchProjectChanges(useEditor, () => {
     if (!opening) host.onChange();
   });
+
+  // Verknüpfte Klexel-Bilder abgleichen: beim Öffnen, beim Wieder-Sichtbarwerden und über „Aktualisieren".
+  // Jedes open() beginnt eine neue Sitzung; Ergebnisse einer älteren werden verworfen. Ein laufender Abgleich
+  // derselben Sitzung wird mitbenutzt statt doppelt gelesen (open und setActive(true) folgen direkt aufeinander).
+  let session = 0;
+  let running: { session: number; promise: Promise<LinkedSyncSummary> } | null = null;
+  const syncSources = (auto: boolean): Promise<LinkedSyncSummary> => {
+    if (running && running.session === session) return running.promise;
+    const mine = session;
+    const promise: Promise<LinkedSyncSummary> = syncLinkedSources(
+      host.sources,
+      {
+        getProject: () => useEditor.getState().project,
+        apply: (p) => useEditor.getState().applyLinkedUpdate(p),
+        isStale: () => destroyed || mine !== session,
+      },
+      (err, id) => console.error(`Klexel-Quelle ${id} konnte nicht gelesen werden`, err),
+    )
+      .then((sum) => {
+        // Automatischer Abgleich: Fehler nur kurz melden (der Knopf „Aktualisieren" zeigt sie selbst an)
+        if (auto && sum.failed > 0 && !destroyed) showToast('Klexel-Bilder konnten nicht aktualisiert werden', 3000);
+        return sum;
+      })
+      .finally(() => {
+        if (running?.promise === promise) running = null;
+      });
+    running = { session: mine, promise };
+    return promise;
+  };
+
   const suite: SuiteBridge = {
     openProjects: () => host.openProjects?.(),
     newProject: (project) => host.requestNewProject(undefined, project),
     logoUrl,
+    ...(host.sources ? { sources: host.sources, syncSources: () => syncSources(false) } : {}),
   };
   // Styles von Rigsprite gelten nur unterhalb dieser Klasse (app.css)
   root.classList.add('area-rigsprite');
@@ -61,11 +94,13 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
   return {
     open(project) {
       opening = true;
+      session++;
       try {
         useEditor.getState().loadProject(project); // neue Sitzung: Undo-Verlauf je Projekt
       } finally {
         opening = false;
       }
+      void syncSources(true);
     },
     snapshot: () => useEditor.getState().project,
     thumbnail: () => thumbnailOf(captureViewport()),
@@ -77,6 +112,10 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
     },
     setActive(on) {
       active = on;
+      // (Wieder) bedienbar: Klexel kann sich inzwischen geändert haben oder gelöscht worden sein. Die Hülle meldet
+      // das auch nach jeder eigenen Aktion (z. B. Löschen in der Projektliste), während Rigsprite sichtbar war.
+      // Ein Abgleich, der schon läuft (z. B. von open), wird mitbenutzt.
+      if (on) void syncSources(true);
       if (!on) {
         const s = useEditor.getState();
         s.setSpaceHeld(false); // losgelassene Leertaste käme sonst nicht mehr an
@@ -85,6 +124,7 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
     },
     destroy() {
       active = false;
+      destroyed = true;
       stopWatch();
       resetGate();
       reactRoot.unmount();

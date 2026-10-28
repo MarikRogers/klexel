@@ -1,4 +1,6 @@
 import { createContext, useContext } from 'react';
+import type { SourceService } from '@suite/shared';
+import type { LinkedSyncSummary } from '../areaLogic';
 import type { Project } from '../core/project';
 
 /**
@@ -12,6 +14,10 @@ export interface SuiteBridge {
   newProject(project: Project): void;
   /** Logo address (the suite has no Rigsprite files in its public folder). */
   logoUrl?: string;
+  /** Klexel projects as image sources; absent when the build has no Klexel (the linking UI is hidden then). */
+  sources?: SourceService;
+  /** Refreshes all linked images from their sources now ("Aktualisieren"); present together with `sources`. */
+  syncSources?(): Promise<LinkedSyncSummary>;
 }
 
 export const SuiteContext = createContext<SuiteBridge | null>(null);

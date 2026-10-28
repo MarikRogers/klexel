@@ -10,8 +10,9 @@ vi.mock('./render/SkinRenderer', () => ({
   },
 }));
 
-import type { AreaHandle, AreaHost } from '@suite/shared';
+import type { AreaHandle, AreaHost, SourceResult } from '@suite/shared';
 import { mountRigsprite, thumbnailOf } from './area';
+import { linkFramesAsImages } from './core/linkedSprites';
 import { createProject, type Project } from './core/project';
 import { useEditor } from './state/store';
 
@@ -148,8 +149,100 @@ describe('rigspriteArea', () => {
     expect(content.rigTemplateId).toBe('quadruped');
   });
 
+  it('ohne host.sources keine Klexel-Verknüpfung in der Oberfläche', () => {
+    const btns = [...root.querySelectorAll('button')].map((b) => b.textContent);
+    expect(btns).not.toContain('Aus Klexel…');
+  });
+
   it('ohne Viewport keine Vorschau', () => {
     expect(thumbnailOf(null)).toBeUndefined();
     expect(handle!.thumbnail()).toBeUndefined();
+  });
+});
+
+describe('rigspriteArea mit Klexel-Quellen', () => {
+  let px = 'A';
+  let readImpl: (id: string) => Promise<SourceResult | null>;
+  const read = vi.fn((id: string) => readImpl(id));
+  const srcHost = { ...host, sources: { list: vi.fn(async () => []), read } } satisfies AreaHost;
+  const source = (): SourceResult => ({
+    projectName: 'Figur',
+    frames: [{ frameId: 1, name: 'head', width: 4, height: 4, dataUrl: `data:image/png;base64,${px}` }],
+  });
+  const linked = () => linkFramesAsImages(createProject('humanoid'), 'k1', source()).project;
+  const headUrl = () => Object.values(useEditor.getState().project.images)[0]?.dataUrl;
+  const flushAsync = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+  beforeEach(() => {
+    act(() => handle?.destroy());
+    root.replaceChildren();
+    px = 'A';
+    readImpl = async () => source();
+    read.mockClear();
+    act(() => {
+      handle = mountRigsprite(root, srcHost);
+    });
+  });
+
+  it('zeigt „Aus Klexel…"', () => {
+    expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toContain('Aus Klexel…');
+  });
+
+  it('open gleicht verknüpfte Bilder ab (ohne Undo-Schritt) und meldet die Änderung', async () => {
+    const p = linked();
+    px = 'B';
+    host.onChange.mockClear();
+    act(() => handle!.open(p));
+    await flushAsync();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith('k1');
+    expect(headUrl()).toBe('data:image/png;base64,B');
+    expect(useEditor.temporal.getState().pastStates).toHaveLength(0);
+    expect(host.onChange).toHaveBeenCalled();
+  });
+
+  it('Wieder-Aktivieren gleicht erneut ab; ein unmittelbar folgendes setActive(true) liest nicht doppelt', async () => {
+    act(() => {
+      handle!.open(linked());
+      handle!.setActive(true);
+    }); // wie die Hülle nach dem Öffnen: läuft mit dem Abgleich von open zusammen
+    await flushAsync();
+    expect(read).toHaveBeenCalledTimes(1);
+    act(() => handle!.setActive(false));
+    px = 'C';
+    act(() => handle!.setActive(true));
+    await flushAsync();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(headUrl()).toBe('data:image/png;base64,C');
+    // auch ohne vorheriges setActive(false) (Hülle nach eigener Aktion, z. B. Quelle gelöscht)
+    readImpl = async () => null;
+    act(() => handle!.setActive(true));
+    await flushAsync();
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(Object.values(useEditor.getState().project.images)[0].source?.missing).toBe(true);
+  });
+
+  it('Ergebnis eines älteren Projekts wird nach erneutem open verworfen', async () => {
+    let release!: (r: SourceResult) => void;
+    readImpl = () => new Promise((res) => (release = res));
+    await act(async () => handle!.open(linked()));
+    const other = createProject('humanoid', 'Anderes');
+    act(() => handle!.open(other));
+    px = 'Z';
+    await act(async () => release(source()));
+    await flushAsync();
+    expect(useEditor.getState().project).toBe(other);
+  });
+
+  it('Lesefehler: Projekt bleibt unverändert', async () => {
+    readImpl = async () => {
+      throw new Error('kaputt');
+    };
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const p = linked();
+    act(() => handle!.open(p));
+    await flushAsync();
+    expect(useEditor.getState().project).toBe(p);
+    expect(err).toHaveBeenCalled();
   });
 });

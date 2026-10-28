@@ -1,20 +1,12 @@
+import type { SourceFrame, SourceResult } from '@suite/shared';
 import { newId } from './id';
 import type { ImageAsset } from './part';
 import type { Project } from './project';
 import { addImagesAutoAttach } from './projectOps';
+import { boneById } from './rig';
 
-export interface SourceFrame {
-  frameId: number;
-  name: string;
-  width: number;
-  height: number;
-  dataUrl: string;
-}
-
-export interface SourceResult {
-  projectName: string;
-  frames: SourceFrame[];
-}
+// The exchange types live in the shared contract (the suite shell produces them); re-exported for Rigsprite code.
+export type { SourceFrame, SourceResult };
 
 const DEFAULT_NAME = /^Frame \d+$/;
 
@@ -118,4 +110,41 @@ export function refreshLinkedImages(
     added = r.added;
   }
   return { project, added, updated, missing };
+}
+
+/**
+ * Carries a link update (`before` → `after`, as produced by refreshLinkedImages / linkFramesAsImages on the current
+ * project) into another project state `q` - an undo/redo history entry or the start of an open transaction - so that
+ * stepping through the history never brings back stale pixels or drops sprites the update added.
+ *  - Linked images changed by the update get its pixels, size and link state in `q` (if `q` has them); the name only
+ *    if `q` still carries the name the update replaced (a user rename in `q` stays).
+ *  - Images new in the update are added to `q`; parts new in the update (auto-attach) too, if their bone exists in `q`.
+ *  - Everything else in `q` stays. Returns `q` itself if nothing applies.
+ */
+export function carryLinkedUpdate(q: Project, before: Project, after: Project): Project {
+  let images: Record<string, ImageAsset> | null = null;
+  for (const [id, img] of Object.entries(after.images)) {
+    const old = before.images[id];
+    if (old === img) continue;
+    const cur = q.images[id];
+    let next: ImageAsset;
+    if (cur === undefined) {
+      if (old !== undefined) continue; // the image was added after (or removed before) `q`: leave `q` alone
+      next = img;
+    } else {
+      if (!img.source) continue;
+      next = { ...cur, dataUrl: img.dataUrl, width: img.width, height: img.height, source: img.source };
+      if (old && img.name !== old.name && cur.name === old.name) next.name = img.name;
+    }
+    images ??= { ...q.images };
+    images[id] = next;
+  }
+  const known = new Set(before.parts.map((p) => p.id));
+  const have = new Set(q.parts.map((p) => p.id));
+  const finalImages = images ?? q.images;
+  const parts = after.parts.filter(
+    (p) => !known.has(p.id) && !have.has(p.id) && finalImages[p.imageId] && boneById(q.rig, p.boneId),
+  );
+  if (!images && parts.length === 0) return q;
+  return { ...q, images: finalImages, parts: parts.length ? [...q.parts, ...parts] : q.parts };
 }
