@@ -11,5 +11,6 @@ export { MAX_IMAGE_SIZE } from './area';
 export type { AreaDescriptor } from './areaDescriptor';
 export { DEFAULT_AUTOSAVE_DELAY_MS } from './areaDescriptor';
 export type { SourceFrame, SourceResult, PixelFrame, SourceService } from './sources';
+export type { FramesDocFrame, FramesDocInput, ReturnRequest, ReturnResult } from './returnDoc';
 export type { Color, CompositeLayer } from './composite';
 export { blendOver, compositeLayers } from './composite';

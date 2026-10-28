@@ -93,3 +93,53 @@ describe('klexelDescriptor', () => {
     expect(d.changeKey(a)).not.toBe(d.changeKey(c));
   });
 });
+
+describe('klexelDescriptor.fromFrames', () => {
+  const px = (w: number, h: number, v: number) => new Uint32Array(w * h).fill(v);
+
+  it('Rundreise über decode: Größe, Frames, Pixel, fps und Namen', () => {
+    const frames = [
+      { name: '', pixels: px(8, 6, 0xff0000ff) },
+      { name: '', pixels: px(8, 6, 0x00ff00ff) },
+      { name: 'Eigener', pixels: px(8, 6, 0x0000ffff) },
+    ];
+    const p = d.fromFrames!({ name: 'walk', width: 8, height: 6, fps: 12, frames });
+    expect(d.decode(p)).toBe(p);
+    const { doc, palette, color } = decodeKlexel(p)!;
+    expect([doc.width, doc.height, doc.fps]).toEqual([8, 6, 12]);
+    expect(doc.layers.map(l => l.name)).toEqual(['Ebene 1']);
+    expect(doc.frames.map(f => f.name)).toEqual(['walk 1', 'walk 2', 'Eigener']);
+    expect(doc.currentFrameId).toBe(doc.frames[0].id);
+    doc.frames.forEach((f, i) => expect([...doc.cel(doc.layers[0].id, f.id)!]).toEqual([...frames[i].pixels]));
+    expect(palette).toEqual(PICO8);
+    expect(color).toBe(PICO8[8]);
+  });
+
+  it('fps wird auf 1..30 begrenzt; lange Namen auf 24 Zeichen mit Nummer', () => {
+    const one = [{ name: '', pixels: px(2, 2, 1) }];
+    expect(decodeKlexel(d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 60, frames: one }))!.doc.fps).toBe(30);
+    expect(decodeKlexel(d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 0, frames: one }))!.doc.fps).toBe(1);
+    const long = decodeKlexel(d.fromFrames!({ name: 'x'.repeat(40), width: 2, height: 2, fps: 8, frames: one }))!;
+    const name = long.doc.frames[0].name!;
+    expect(name.length).toBeLessThanOrEqual(24);
+    expect(name.endsWith(' 1')).toBe(true);
+  });
+
+  it('Pixel werden kopiert, nicht geteilt', () => {
+    const pixels = px(2, 2, 0x112233ff);
+    const p = d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 8, frames: [{ name: '', pixels }] });
+    pixels.fill(0);
+    const { doc } = decodeKlexel(p)!;
+    expect([...doc.cel(doc.layers[0].id, doc.frames[0].id)!]).toEqual([0x112233ff, 0x112233ff, 0x112233ff, 0x112233ff]);
+  });
+
+  it('Grenzen von Klexel: Größe 1..128, Frames 1..64, passende Pixelanzahl → RangeError', () => {
+    const f = (w: number, h: number) => ({ name: '', pixels: px(w, h, 0) });
+    expect(() => d.fromFrames!({ name: 'a', width: 129, height: 2, fps: 8, frames: [f(129, 2)] })).toThrow(RangeError);
+    expect(() => d.fromFrames!({ name: 'a', width: 2, height: 0, fps: 8, frames: [] })).toThrow(RangeError);
+    expect(() => d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 8, frames: [] })).toThrow(RangeError);
+    expect(() => d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 8, frames: Array.from({ length: 65 }, () => f(2, 2)) })).toThrow(RangeError);
+    expect(() => d.fromFrames!({ name: 'a', width: 2, height: 2, fps: 8, frames: [f(3, 2)] })).toThrow(RangeError);
+    expect(() => d.fromFrames!({ name: 'a', width: 128, height: 128, fps: 8, frames: Array.from({ length: 64 }, () => f(128, 128)) })).not.toThrow();
+  });
+});

@@ -1,6 +1,7 @@
 import type { ProjectKind } from './workspace/types';
 import type { Area, NewProjectInit } from './area';
 import type { PixelFrame } from './sources';
+import type { FramesDocInput } from './returnDoc';
 
 /**
  * Leichte, statisch ladbare Beschreibung eines Bereichs: alles, was die Hülle über die Projekte dieser Art
@@ -35,6 +36,11 @@ export interface AreaDescriptor<P> {
    * Projektnamen). null = nicht lesbar. Fehlt bei Arten, die keine Frames liefern.
    */
   framesOf?(payload: P): { name: string; frames: PixelFrame[] } | null;
+  /**
+   * Neuer Inhalt aus Einzelbildern (DOM-frei; Rigsprite → Klexel): ein Frame je Bild. Wirft RangeError, wenn
+   * Größe oder Anzahl die Grenzen dieser Art überschreiten. Fehlt bei Arten, die so nichts anlegen können.
+   */
+  fromFrames?(input: FramesDocInput): P;
 }
 
 /** Standard-Wartezeit des Autosaves der Hülle (Klexel meldet bereits entprellt, 500 ms). */
