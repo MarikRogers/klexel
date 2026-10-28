@@ -1,0 +1,96 @@
+import type { KvBackend, ProjectKind, ProjectMeta } from './types';
+
+const INDEX = 'ws:index', LAST = 'ws:last';
+const pKey = (id: string) => `ws:p:${id}`;
+
+export function newProjectId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export class WorkspaceStore {
+  // Index-Änderungen laufen nacheinander, sonst überschreiben parallele Speichervorgänge einander
+  private chain: Promise<unknown> = Promise.resolve();
+
+  constructor(private kv: KvBackend) {}
+
+  private async readIndex(): Promise<ProjectMeta[]> {
+    const v = await this.kv.get(INDEX);
+    return Array.isArray(v) ? (v as ProjectMeta[]) : [];
+  }
+
+  private updateIndex<T>(fn: (idx: ProjectMeta[]) => T): Promise<T> {
+    const run = this.chain.then(async () => {
+      const idx = await this.readIndex();
+      const res = fn(idx);
+      await this.kv.set(INDEX, idx);
+      return res;
+    });
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  async list(): Promise<ProjectMeta[]> {
+    await this.chain;
+    // Bei gleichem Zeitstempel zuerst das später angelegte (Umkehr + stabile Sortierung)
+    return (await this.readIndex()).reverse().sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async create(kind: ProjectKind, name: string, payload: unknown): Promise<ProjectMeta> {
+    const meta: ProjectMeta = { id: newProjectId(), kind, name, updatedAt: Date.now() };
+    await this.kv.set(pKey(meta.id), payload);
+    await this.updateIndex(idx => { idx.push(meta); });
+    return { ...meta };
+  }
+
+  async load(id: string): Promise<unknown | null> {
+    const v = await this.kv.get(pKey(id));
+    return v === undefined ? null : v;
+  }
+
+  async save(id: string, payload: unknown, patch?: Partial<Pick<ProjectMeta, 'name' | 'thumbnail'>>): Promise<void> {
+    await this.kv.set(pKey(id), payload);
+    await this.updateIndex(idx => {
+      const m = idx.find(x => x.id === id);
+      if (!m) return;
+      if (patch?.name !== undefined) m.name = patch.name;
+      if (patch?.thumbnail !== undefined) m.thumbnail = patch.thumbnail;
+      // Streng wachsend, damit die Sortierung auch bei gleicher Millisekunde stimmt
+      m.updatedAt = Math.max(Date.now(), m.updatedAt + 1);
+    });
+  }
+
+  async rename(id: string, name: string): Promise<void> {
+    await this.updateIndex(idx => {
+      const m = idx.find(x => x.id === id);
+      if (m) m.name = name;
+    });
+  }
+
+  async duplicate(id: string): Promise<ProjectMeta> {
+    const src = (await this.list()).find(m => m.id === id);
+    if (!src) throw new Error(`Projekt ${id} nicht gefunden`);
+    const payload = await this.load(id);
+    const meta: ProjectMeta = { ...src, id: newProjectId(), name: `${src.name} (Kopie)`, updatedAt: Date.now() };
+    await this.kv.set(pKey(meta.id), payload);
+    await this.updateIndex(idx => { idx.push(meta); });
+    return { ...meta };
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.updateIndex(idx => {
+      const i = idx.findIndex(x => x.id === id);
+      if (i >= 0) idx.splice(i, 1);
+    });
+    await this.kv.del(pKey(id));
+    if ((await this.lastOpened()) === id) await this.setLastOpened(null);
+  }
+
+  async lastOpened(): Promise<string | null> {
+    const v = await this.kv.get(LAST);
+    return typeof v === 'string' ? v : null;
+  }
+
+  async setLastOpened(id: string | null): Promise<void> {
+    if (id === null) await this.kv.del(LAST); else await this.kv.set(LAST, id);
+  }
+}
