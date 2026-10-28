@@ -36,7 +36,9 @@ body.shell-busy #app { pointer-events:none; }
 .pl-meta { font-size:13px; opacity:.8; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .pl-badge { font-size:12px; padding:1px 6px; border-radius:6px; background:#33404f; }
 .pl-badge.off { background:#4f3333; }
-.pl-actions { grid-area:actions; display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+.pl-file { display:flex; gap:8px; flex-wrap:wrap; }
+.pl-file button { flex:1 1 140px; min-height:44px; font-size:14px; }
+.pl-actions { grid-area:actions; display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
 .pl-actions button { min-width:0; font-size:14px; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width: 380px) {
   .pl-actions { grid-template-columns:repeat(2, 1fr); }

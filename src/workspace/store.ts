@@ -42,6 +42,14 @@ export class WorkspaceStore {
     return { ...meta };
   }
 
+  /** Legt ein Projekt mit neuer ID an und behält Art, Datum, Vorschau und Herkunft aus `src` (Dateiimport). */
+  async add(src: Omit<ProjectMeta, 'id'>, payload: unknown): Promise<ProjectMeta> {
+    const meta: ProjectMeta = { ...src, id: newProjectId() };
+    await this.kv.set(pKey(meta.id), payload);
+    await this.updateIndex(idx => { idx.push(meta); });
+    return { ...meta };
+  }
+
   async load(id: string): Promise<unknown | null> {
     const v = await this.kv.get(pKey(id));
     return v === undefined ? null : v;

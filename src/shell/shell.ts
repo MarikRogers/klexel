@@ -15,6 +15,7 @@ import { createAutosave } from './autosave';
 import { nextUntitledName, afterRemoveError } from './listModel';
 import { snapshotKey } from './snapshotKey';
 import { createProjectList } from './projectList';
+import { createFileActions } from './fileMenu';
 
 export interface Shell {
   /** Wechselt zum Projekt id: offene Bearbeitung absetzen, sichern, dann laden und öffnen. Läuft eingereiht, nie parallel. */
@@ -232,6 +233,13 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     });
   }
 
+  const files = createFileActions({
+    store,
+    prepare: () => enqueue(saveCurrent),
+    isKnownKind: kind => kind === 'klexel',
+    validatePayload: (kind, payload) => kind !== 'klexel' || decodeKlexel(payload) !== null,
+  });
+
   list = createProjectList({
     list: () => store.list(),
     currentId: () => currentId,
@@ -241,6 +249,9 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     duplicate: duplicateProject,
     remove: removeProject,
     create: (width, height) => newProject({ width, height }),
+    exportAll: files.exportAll,
+    exportOne: m => files.exportOne(m.id, m.name),
+    importFile: async f => { await files.importFile(f); },
   });
 
   // Knopf „Projekte" neben der Marke in Klexels Kopfleiste

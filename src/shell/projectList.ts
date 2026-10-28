@@ -11,6 +11,9 @@ export interface ProjectListDeps {
   duplicate(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   create(width: number, height: number): Promise<void>;
+  exportAll(): Promise<void>;
+  exportOne(meta: ProjectMeta): Promise<void>;
+  importFile(file: File): Promise<void>;
 }
 
 export interface ProjectList {
@@ -79,6 +82,11 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
         <input type="search" class="pl-search" placeholder="Suchen …" aria-label="Projekte suchen" />
         <button type="button" class="pl-new primary">＋ Neues Projekt</button>
       </div>
+      <div class="pl-file">
+        <button type="button" class="pl-save-all">Alle Projekte sichern</button>
+        <button type="button" class="pl-load">Datei laden …</button>
+        <input type="file" class="pl-file-input" accept=".json,application/json" hidden />
+      </div>
       <p class="pl-empty" hidden></p>
       <ul class="pl-items"></ul>
     </div>`;
@@ -135,6 +143,7 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
         openBtn,
         button('Umbenennen', '', () => void renameDialog(m)),
         dupBtn,
+        button('Als Datei sichern', '', () => void act(() => deps.exportOne(m))),
         button('Löschen', 'danger', () => void removeDialog(m)),
       );
       li.append(thumb, info, actions);
@@ -193,6 +202,14 @@ export function createProjectList(deps: ProjectListDeps): ProjectList {
   }
 
   q<HTMLButtonElement>('.pl-close').onclick = () => dlg.close();
+  const fileInput = q<HTMLInputElement>('.pl-file-input');
+  q<HTMLButtonElement>('.pl-save-all').onclick = () => void act(() => deps.exportAll());
+  q<HTMLButtonElement>('.pl-load').onclick = () => fileInput.click();
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files?.[0];
+    fileInput.value = '';
+    if (f) void act(() => deps.importFile(f));
+  });
   q<HTMLButtonElement>('.pl-new').onclick = () => void newDialog();
   search.addEventListener('input', render);
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
