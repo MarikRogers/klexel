@@ -19,7 +19,8 @@ export function hitTestBone(rig: Rig, world: Record<string, Mat2D>, p: Vec2, tol
   for (const bone of rig.bones) {
     const m = world[bone.id];
     if (!m) continue;
-    const d = distToSegment(p, boneOrigin(m), boneTip(m, bone));
+    // A thick bone is grabbed anywhere on its body, not only near the centre line
+    const d = Math.max(0, distToSegment(p, boneOrigin(m), boneTip(m, bone)) - (bone.thickness ?? 0) / 2);
     if (d <= bestDist) {
       best = bone.id;
       bestDist = d;

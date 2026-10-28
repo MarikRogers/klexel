@@ -116,7 +116,10 @@ function parseBone(b: unknown): Bone {
   if (!s || !n || !(parentId === null || isStr(parentId))) return fail(BAD_BONE);
   // length > 0 rather than MIN_BONE_LENGTH: files with shorter bones stay loadable.
   if (n.length <= 0 || n.softness < MIN_SOFTNESS) return fail(BAD_BONE);
-  return { id: s.id, name: s.name, parentId, ...n };
+  const bone: Bone = { id: s.id, name: s.name, parentId, ...n };
+  // Optional display width; an invalid value is dropped (the bone keeps its automatic width).
+  if (isNum(b.thickness) && b.thickness > 0) bone.thickness = b.thickness;
+  return bone;
 }
 
 function checkHierarchy(bones: Bone[]): void {

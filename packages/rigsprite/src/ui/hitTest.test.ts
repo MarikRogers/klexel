@@ -36,6 +36,13 @@ describe('hitTestBone', () => {
     expect(hitTestBone(rig, world, { x: 2, y: 60 }, 5)).toBe('b');
   });
 
+  it('a thick bone is grabbed within half its thickness around the segment', () => {
+    const thick: Rig = { bones: [{ ...bone('a', 0, 0, 0, 100), thickness: 20 }] };
+    const w = computeWorldTransforms(thick);
+    expect(hitTestBone(thick, w, { x: 50, y: 10.5 }, 1)).toBe('a');
+    expect(hitTestBone(thick, w, { x: 50, y: 12 }, 1)).toBeNull();
+  });
+
   it('prefers the closer bone when several are within tolerance', () => {
     // distance to a = 9, distance to b (segment starts at y=20) = hypot(3, 11) ≈ 11.4
     expect(hitTestBone(rig, world, { x: 3, y: 9 }, 15)).toBe('a');

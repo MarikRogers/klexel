@@ -11,6 +11,8 @@ export interface Bone {
   rotation: number;
   length: number;
   softness: number;
+  /** Drawn width of the bone in world units (overlay and grab area); absent = automatic from the length. */
+  thickness?: number;
 }
 
 export interface Rig {
@@ -35,11 +37,17 @@ export function boneById(rig: Rig, id: string | null | undefined): Bone | undefi
   return id == null ? undefined : rig.bones.find((b) => b.id === id);
 }
 
-/** Clamps `length` to >= MIN_BONE_LENGTH and `softness` to >= MIN_SOFTNESS; other fields pass through. */
+/** Display width a bone without `thickness` has in world units (matches the overlay's automatic width). */
+export function autoThickness(bone: Pick<Bone, 'length'>): number {
+  return bone.length * 0.24;
+}
+
+/** Clamps `length` to >= MIN_BONE_LENGTH, `softness` to >= MIN_SOFTNESS and `thickness` to >= 1; other fields pass through. */
 export function sanitizeBonePatch<P extends Partial<Bone>>(patch: P): P {
   const out = { ...patch };
   if (out.length !== undefined) out.length = Math.max(MIN_BONE_LENGTH, out.length);
   if (out.softness !== undefined) out.softness = Math.max(MIN_SOFTNESS, out.softness);
+  if (out.thickness !== undefined) out.thickness = Math.max(1, out.thickness);
   return out;
 }
 

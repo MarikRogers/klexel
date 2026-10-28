@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { boneById } from '../core/rig';
+import { autoThickness, boneById } from '../core/rig';
 import { isBoneNameTaken, useEditor } from '../state/store';
 import { CommitInput, parseNumber } from './CommitInput';
 import { DepthPanel } from './DepthPanel';
@@ -68,6 +68,11 @@ export function Inspector() {
           <NumberField label="y" value={bone.y} onCommit={(v) => updateBone(bone.id, { y: v })} />
           <NumberField label="Rotation" value={bone.rotation} onCommit={(v) => updateBone(bone.id, { rotation: v })} />
           <NumberField label="Länge" value={bone.length} onCommit={(v) => updateBone(bone.id, { length: v })} />
+          <NumberField
+            label="Dicke"
+            value={bone.thickness ?? autoThickness(bone)}
+            onCommit={(v) => updateBone(bone.id, { thickness: v })}
+          />
           <NumberField
             label="Gelenk-Weichheit"
             value={bone.softness}

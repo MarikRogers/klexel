@@ -36,7 +36,9 @@ export function drawOverlay(
     const dx = t.x - o.x;
     const dy = t.y - o.y;
     const len = dist(o, t);
-    const half = clamp(len * HALF_WIDTH_FACTOR, MIN_HALF_WIDTH_PX, MAX_HALF_WIDTH_PX);
+    const half = bone.thickness !== undefined
+      ? Math.max(MIN_HALF_WIDTH_PX, (bone.thickness / 2) * view.zoom)
+      : clamp(len * HALF_WIDTH_FACTOR, MIN_HALF_WIDTH_PX, MAX_HALF_WIDTH_PX);
     const nx = len > 0 ? -dy / len : 0;
     const ny = len > 0 ? dx / len : 0;
     const bx = o.x + dx * BASE_OFFSET;

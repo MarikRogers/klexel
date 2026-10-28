@@ -98,6 +98,8 @@ describe('sanitizeBonePatch', () => {
     expect(sanitizeBonePatch({ length: -5, softness: -3, name: 'n' })).toEqual({ length: 1, softness: 0, name: 'n' });
     expect(sanitizeBonePatch({ length: 7.5, softness: 2 })).toEqual({ length: 7.5, softness: 2 });
     expect(sanitizeBonePatch({ x: 3 })).toEqual({ x: 3 });
+    expect(sanitizeBonePatch({ thickness: 0 })).toEqual({ thickness: 1 });
+    expect(sanitizeBonePatch({ thickness: 12 })).toEqual({ thickness: 12 });
   });
 });
 
