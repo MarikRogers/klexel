@@ -97,18 +97,15 @@ describe('Service Worker', () => {
   });
 
   it('Aktivieren räumt den eigenen Cache auf: alte gehashte Dateien weg, aktuelle Fassung bleibt offline nutzbar', async () => {
-    const sw = setup('pixelart-klexel-v7', online, ['./assets/chunk-NEU.js']);
+    const sw = setup('pixelart-klexel-v7', { ...online, [`${BASE}assets/chunk-NEU.js`]: 'chunk' }, ['./assets/chunk-NEU.js']);
     const own = await sw.caches.open('pixelart-klexel-v7');
     // Stand eines früheren Deploys mit gleichem Cache-Namen
     await own.put('./assets/index-ALT.js', new Response('alt'));
     await own.put('./assets/chunk-ALT.js', new Response('alt'));
     const foreign = await sw.caches.open('andere-app-v1');
     await foreign.put('./assets/index-ALT.js', new Response('fremd'));
-    online[`${BASE}assets/chunk-NEU.js`] = 'chunk';
-    try {
-      await sw.dispatch('install');
-      await sw.dispatch('activate');
-    } finally { delete online[`${BASE}assets/chunk-NEU.js`]; }
+    await sw.dispatch('install');
+    await sw.dispatch('activate');
     const kept = [...own.entries.keys()];
     expect(kept).not.toContain(`${BASE}assets/index-ALT.js`);
     expect(kept).not.toContain(`${BASE}assets/chunk-ALT.js`);
