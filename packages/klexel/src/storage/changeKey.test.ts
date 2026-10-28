@@ -26,4 +26,10 @@ describe('changeKey', () => {
     const keys = new Set([a, b, c, d].map(changeKey));
     expect(keys.size).toBe(4);
   });
+
+  it('nur ein Frame-Name anders → anderer Schlüssel', () => {
+    const da = new PixelDocument(8, 8), db = new PixelDocument(8, 8);
+    db.renameFrame(1, 'Lauf');
+    expect(changeKey(encodeKlexel(da, [1], 1))).not.toBe(changeKey(encodeKlexel(db, [1], 1)));
+  });
 });

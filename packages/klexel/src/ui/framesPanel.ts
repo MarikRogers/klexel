@@ -2,6 +2,7 @@ import { PixelDocument, frameActions, MAX_FRAMES } from '../model/Document';
 import { History } from '../model/History';
 import { ICON } from './icons';
 import { drawThumb } from './thumb';
+import { frameLabel } from './frameLabel';
 import { nextPlaybackIndex } from '../render/onion';
 import { renderSheet, frameFiles, sheetLayout, sheetTooLarge, type SheetMode } from '../export/sheet';
 import { buildZip } from '../export/zip';
@@ -216,20 +217,32 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     drawThumb(tile.querySelector('canvas')!, d.compositeFrame(frameId), d.width, d.height);
   }
 
+  function rename(frameId: number): void {
+    const frame = doc().frames.find((f) => f.id === frameId);
+    if (!frame) return;
+    const name = window.prompt('Name des Frames (leer = Nummer)', frame.name ?? '');
+    if (name === null) return;
+    run(() => history().renameFrame(frameId, name));
+  }
+
   function buildTiles(d: PixelDocument): void {
     strip.innerHTML = '';
     d.frames.forEach((frame, i) => {
       const tile = document.createElement('button');
       tile.className = 'frame-tile' + (frame.id === d.currentFrameId ? ' active' : '');
       tile.dataset.id = String(frame.id);
-      tile.title = `Frame ${i + 1}`;
+      tile.title = frame.name ? `Frame ${i + 1}: ${frame.name}` : `Frame ${i + 1}`;
       const thumb = document.createElement('canvas');
       thumb.width = thumb.height = 24;
       const num = document.createElement('span');
-      num.textContent = String(i + 1);
+      num.className = 'frame-name';
+      num.textContent = frameLabel(frame, i);
       tile.append(thumb, num);
-      tile.onclick = () => {
-        if (frame.id === deps.getDoc().currentFrameId) return;
+      tile.onclick = (e) => {
+        if (frame.id === deps.getDoc().currentFrameId) {
+          if (e.target === num) rename(frame.id);
+          return;
+        }
         run(() => deps.getDoc().setCurrentFrame(frame.id));
       };
       strip.appendChild(tile);
@@ -240,7 +253,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     if (!open) return;
     const d = doc();
     // Tiles nur neu aufbauen, wenn sich Reihenfolge oder aktueller Frame ändern
-    const sig = d.frames.map(f => f.id).join(',') + `#${d.currentFrameId}`;
+    const sig = d.frames.map(f => `${f.id}:${f.name ?? ''}`).join(',') + `#${d.currentFrameId}`;
     const rebuilt = sig !== signature;
     if (rebuilt) { signature = sig; allThumbs = true; buildTiles(d); }
     const tiles = strip.children;

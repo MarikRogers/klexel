@@ -12,7 +12,8 @@ type Step =
   | { kind: 'addFrame'; frame: Frame; index: number; prevCurrent: number }
   | { kind: 'duplicateFrame'; frame: Frame; index: number; prevCurrent: number; cels: Map<number, Uint32Array | undefined> }
   | { kind: 'removeFrame'; frame: Frame; index: number; prevCurrent: number; nextCurrent: number; cels: Map<number, Uint32Array | undefined> }
-  | { kind: 'moveFrame'; id: number; from: number; to: number };
+  | { kind: 'moveFrame'; id: number; from: number; to: number }
+  | { kind: 'renameFrame'; id: number; before: string | undefined; after: string | undefined };
 
 function snapshot(l: LayerProps): LayerProps {
   return { name: l.name, visible: l.visible, locked: l.locked, opacity: l.opacity };
@@ -263,6 +264,17 @@ export class History {
     return true;
   }
 
+  renameFrame(id: number, name: string): boolean {
+    const frame = this.doc.frames.find((f) => f.id === id);
+    if (!frame) return false;
+    const before = frame.name;
+    this.doc.renameFrame(id, name);
+    const after = frame.name;
+    if (before === after) return false;
+    this.push({ kind: 'renameFrame', id, before, after });
+    return true;
+  }
+
   setProps(id: number, props: Partial<LayerProps>): boolean {
     const layer = this.doc.getLayer(id);
     if (!layer) return false;
@@ -378,6 +390,9 @@ export class History {
         return;
       case 'moveFrame':
         doc.moveFrame(step.id, undo ? step.from : step.to);
+        return;
+      case 'renameFrame':
+        doc.renameFrame(step.id, (undo ? step.before : step.after) ?? '');
         return;
     }
   }

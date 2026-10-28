@@ -1,4 +1,4 @@
-import { PixelDocument, MAX_LAYERS, MAX_SIZE, MAX_FRAMES, MAX_PIXELS, type Frame, type Layer, type LayerProps } from '../model/Document';
+import { PixelDocument, MAX_LAYERS, MAX_SIZE, MAX_FRAMES, MAX_PIXELS, MAX_NAME, type Frame, type Layer, type LayerProps } from '../model/Document';
 
 export type SavedLayer = LayerProps & { id: number; cels: Record<string, Uint32Array> };
 
@@ -89,7 +89,8 @@ function parseFrames(raw: unknown): Frame[] | null {
   for (const f of raw) {
     const id = f?.id;
     if (!Number.isInteger(id) || id < 1 || frames.some((o) => o.id === id)) return null;
-    frames.push({ id });
+    const name = typeof f.name === 'string' ? f.name.trim().slice(0, MAX_NAME).trim() : '';
+    frames.push(name ? { id, name } : { id });
   }
   return frames;
 }

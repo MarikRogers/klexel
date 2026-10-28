@@ -5,7 +5,7 @@ export const MAX_SIZE = MAX_IMAGE_SIZE;
 export const MAX_LAYERS = 16;
 export const MAX_FRAMES = 64;
 export const MAX_PIXELS = 16_000_000;
-const MAX_NAME = 24;
+export const MAX_NAME = 24;
 
 export type Color = number; // 0xRRGGBBAA
 
@@ -18,6 +18,8 @@ export interface LayerProps {
 
 export interface Frame {
   id: number;
+  /** Optionaler Name (Metadatum); fehlt = keine Benennung */
+  name?: string;
 }
 
 export interface Layer extends LayerProps {
@@ -177,6 +179,16 @@ export class PixelDocument {
     if (from < 0) throw new RangeError('Frame unbekannt');
     const [frame] = this.frames.splice(from, 1);
     this.frames.splice(Math.max(0, Math.min(toIndex, this.frames.length)), 0, frame);
+  }
+
+  /** Benennt einen Frame (getrimmt, höchstens MAX_NAME Zeichen); leer löscht den Namen. Unbekannte id → false. */
+  renameFrame(frameId: number, name: string): boolean {
+    const frame = this.frames.find((f) => f.id === frameId);
+    if (!frame) return false;
+    const n = name.trim().slice(0, MAX_NAME).trim();
+    if (n) frame.name = n;
+    else delete frame.name;
+    return true;
   }
 
   setCurrentFrame(id: number): void {

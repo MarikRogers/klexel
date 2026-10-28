@@ -144,3 +144,28 @@ describe('Frame-Modell', () => {
     expect([mid.canRemove, mid.canMoveLeft, mid.canMoveRight]).toEqual([true, true, true]);
   });
 });
+
+describe('Frame-Namen', () => {
+  it('renameFrame: setzt, trimmt, kürzt auf 24, leer löscht, unbekannte id → false', () => {
+    const doc = new PixelDocument(2, 2);
+    expect(doc.renameFrame(1, '  Lauf ')).toBe(true);
+    expect(doc.frames[0].name).toBe('Lauf');
+    doc.renameFrame(1, 'y'.repeat(30));
+    expect(doc.frames[0].name).toBe('y'.repeat(24));
+    expect(doc.renameFrame(1, '   ')).toBe(true);
+    expect('name' in doc.frames[0]).toBe(false);
+    expect(doc.renameFrame(99, 'x')).toBe(false);
+  });
+
+  it('Neuer Frame hat keinen Namen; Löschen und Verschieben behalten Namen bei ihren Frames', () => {
+    const doc = new PixelDocument(2, 2);
+    doc.renameFrame(1, 'A');
+    addFrames(doc, 2);
+    doc.renameFrame(2, 'B');
+    doc.moveFrame(2, 0);
+    expect(doc.frames.map((f) => f.name)).toEqual(['B', 'A', undefined]);
+    doc.removeFrame(1);
+    expect(doc.frames.map((f) => f.name)).toEqual(['B', undefined]);
+  });
+});
+

@@ -278,3 +278,34 @@ describe('insertFrame und Composite-Cache', () => {
     expect(doc.compositeFrame(doc.frames[2].id)).toBe(before[1]);
   });
 });
+
+describe('renameFrame', () => {
+  it('ist rückgängig- und wiederholbar; unveränderter Name erzeugt keinen Schritt', () => {
+    const { doc, h } = setup();
+    expect(h.renameFrame(1, 'Lauf')).toBe(true);
+    expect(h.renameFrame(1, 'Lauf')).toBe(false);
+    expect(h.renameFrame(99, 'x')).toBe(false);
+    expect(doc.frames[0].name).toBe('Lauf');
+    h.undo();
+    expect(doc.frames[0].name).toBeUndefined();
+    h.redo();
+    expect(doc.frames[0].name).toBe('Lauf');
+    h.renameFrame(1, '');
+    expect(doc.frames[0].name).toBeUndefined();
+    h.undo();
+    expect(doc.frames[0].name).toBe('Lauf');
+  });
+
+  it('Duplizieren übernimmt den Namen nicht; Löschen-Undo bringt den Namen zurück', () => {
+    const { doc, h } = setup();
+    h.renameFrame(1, 'Lauf');
+    const dup = h.duplicateFrame()!;
+    expect(dup.name).toBeUndefined();
+    expect(doc.frames.map((f) => f.name)).toEqual(['Lauf', undefined]);
+    h.removeFrame();
+    doc.setCurrentFrame(1);
+    h.undo();
+    expect(doc.frames.map((f) => f.name)).toEqual(['Lauf', undefined]);
+  });
+});
+

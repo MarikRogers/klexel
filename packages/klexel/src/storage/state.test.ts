@@ -188,4 +188,40 @@ describe('state', () => {
     expect(b.frames).toEqual([{ id: 1 }]);
     expect(parseState(validRaw())!.doc.frames).toEqual([{ id: 1 }]);
   });
+
+  describe('Frame-Namen', () => {
+    it('Name übersteht serialize → parse; Frames ohne Namen bleiben ohne', () => {
+      const doc = new PixelDocument(2, 2);
+      doc.insertFrame(doc.createFrame(), 1);
+      doc.renameFrame(1, 'Lauf');
+      const s = serializeState(doc, [1], 1);
+      expect(s.version).toBe(3);
+      const back = parseState(s)!.doc;
+      expect(back.frames).toEqual([{ id: 1, name: 'Lauf' }, { id: 2 }]);
+    });
+
+    it('Zustand ohne Namen lädt unverändert', () => {
+      expect(parseState(validRaw3())!.doc.frames).toEqual([{ id: 1 }, { id: 2 }]);
+    });
+
+    it('Name wird getrimmt und auf 24 Zeichen gekürzt', () => {
+      const raw = validRaw3();
+      raw.frames[0].name = '  ' + 'x'.repeat(40) + '  ';
+      expect(parseState(raw)!.doc.frames[0].name).toBe('x'.repeat(24));
+    });
+
+    it('ungültige Namen (Zahl, Objekt, leer) werden ignoriert', () => {
+      const raw = validRaw3();
+      raw.frames = [{ id: 1, name: 5 }, { id: 2, name: { a: 1 } }, { id: 3, name: '   ' }];
+      raw.layers = [rawLayer3(1)];
+      const frames = parseState(raw)!.doc.frames;
+      expect(frames).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    });
+
+    it('ungültige Frame-ID bleibt ungültig, auch mit Namen', () => {
+      const raw = validRaw3();
+      raw.frames = [{ id: 1, name: 'a' }, { id: 1, name: 'b' }];
+      expect(parseState(raw)).toBeNull();
+    });
+  });
 });

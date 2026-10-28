@@ -99,6 +99,7 @@ dialog input[type=number] { width:5em; font-size:18px; }
 .frames-head { display:flex; justify-content:space-between; align-items:center; font-weight:600; }
 .frames-strip { flex:none; display:flex; gap:6px; overflow-x:auto; padding:2px 0; }
 .frame-tile { flex:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:44px; min-height:52px; padding:2px 4px; border:2px solid transparent; border-radius:10px; background:#2b2b36; font-size:12px; }
+.frame-tile .frame-name { max-width:72px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .frame-tile.active { border-color:var(--accent); background:#33404f; }
 .frames-actions { flex-wrap:nowrap; }
 .frames-actions button[aria-disabled=true] { opacity:.4; }
