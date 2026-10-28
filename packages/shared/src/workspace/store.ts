@@ -11,7 +11,16 @@ export class WorkspaceStore {
   // Index-Änderungen laufen nacheinander, sonst überschreiben parallele Speichervorgänge einander
   private chain: Promise<unknown> = Promise.resolve();
 
+  // Zuletzt vergebener Zeitstempel: neue und gesicherte Projekte bekommen streng wachsende Werte, auch in
+  // derselben Millisekunde (sonst hängt die Reihenfolge der Liste vom Zufall der Uhr ab)
+  private lastStamp = 0;
+
   constructor(private kv: KvBackend) {}
+
+  private tick(atLeast = 0): number {
+    this.lastStamp = Math.max(Date.now(), this.lastStamp + 1, atLeast + 1);
+    return this.lastStamp;
+  }
 
   private async readIndex(): Promise<ProjectMeta[]> {
     const v = await this.kv.get(INDEX);
@@ -36,15 +45,15 @@ export class WorkspaceStore {
   }
 
   async create(kind: ProjectKind, name: string, payload: unknown): Promise<ProjectMeta> {
-    const meta: ProjectMeta = { id: newProjectId(), kind, name, updatedAt: Date.now() };
+    const meta: ProjectMeta = { id: newProjectId(), kind, name, updatedAt: this.tick() };
     await this.kv.set(pKey(meta.id), payload);
     await this.updateIndex(idx => { idx.push(meta); });
     return { ...meta };
   }
 
   /** Legt ein Projekt mit neuer ID an und behält Art, Datum, Vorschau und Herkunft aus `src` (Dateiimport). */
-  async add(src: Omit<ProjectMeta, 'id'>, payload: unknown): Promise<ProjectMeta> {
-    const meta: ProjectMeta = { ...src, id: newProjectId() };
+  async add(src: Omit<ProjectMeta, 'id'>, payload: unknown, id: string = newProjectId()): Promise<ProjectMeta> {
+    const meta: ProjectMeta = { ...src, id };
     await this.kv.set(pKey(meta.id), payload);
     await this.updateIndex(idx => { idx.push(meta); });
     return { ...meta };
@@ -64,8 +73,8 @@ export class WorkspaceStore {
       await this.kv.set(pKey(id), payload);
       if (patch?.name !== undefined) m.name = patch.name;
       if (patch?.thumbnail !== undefined) m.thumbnail = patch.thumbnail;
-      // Streng wachsend, damit die Sortierung auch bei gleicher Millisekunde stimmt
-      m.updatedAt = Math.max(Date.now(), m.updatedAt + 1);
+      // Streng wachsend (auch gegenüber allen zuvor vergebenen), damit die Sortierung nicht von der Uhr abhängt
+      m.updatedAt = this.tick(m.updatedAt);
     });
   }
 
@@ -80,7 +89,7 @@ export class WorkspaceStore {
     const src = (await this.list()).find(m => m.id === id);
     if (!src) throw new Error(`Projekt ${id} nicht gefunden`);
     const payload = await this.load(id);
-    const meta: ProjectMeta = { ...src, id: newProjectId(), name: `${src.name} (Kopie)`, updatedAt: Date.now() };
+    const meta: ProjectMeta = { ...src, id: newProjectId(), name: `${src.name} (Kopie)`, updatedAt: this.tick() };
     await this.kv.set(pKey(meta.id), payload);
     await this.updateIndex(idx => { idx.push(meta); });
     return { ...meta };

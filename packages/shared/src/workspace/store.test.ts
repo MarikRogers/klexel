@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WorkspaceStore } from './store';
 import { MemoryBackend } from './memoryBackend';
 
@@ -94,5 +94,30 @@ describe('WorkspaceStore', () => {
     const { ws } = setup();
     await Promise.all([ws.create('klexel', 'A', 1), ws.create('klexel', 'B', 2), ws.create('klexel', 'C', 3)]);
     expect(await ws.list()).toHaveLength(3);
+  });
+
+  describe('Zeitstempel', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('save rückt nach vorn, auch wenn die Uhr den Wert des zuletzt angelegten Projekts nur erreicht', async () => {
+      const { ws } = setup();
+      const now = vi.spyOn(Date, 'now');
+      now.mockReturnValue(100);
+      const a = await ws.create('klexel', 'A', 1);
+      now.mockReturnValue(101);
+      const b = await ws.create('klexel', 'B', 2);
+      await ws.save(a.id, 3); // Uhr = 101 = updatedAt von B: früher Gleichstand, B blieb vorn
+      expect((await ws.list()).map(m => m.id)).toEqual([a.id, b.id]);
+    });
+
+    it('laufen Uhr und Vergabe rückwärts oder gleich, wachsen die Werte trotzdem streng', async () => {
+      const { ws } = setup();
+      vi.spyOn(Date, 'now').mockReturnValue(500);
+      const a = await ws.create('klexel', 'A', 1);
+      const b = await ws.create('klexel', 'B', 2);
+      const c = await ws.duplicate(a.id);
+      expect(b.updatedAt).toBeGreaterThan(a.updatedAt);
+      expect(c.updatedAt).toBeGreaterThan(b.updatedAt);
+    });
   });
 });
