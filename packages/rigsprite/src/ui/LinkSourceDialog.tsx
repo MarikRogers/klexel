@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ProjectMeta, SourceService } from '@suite/shared';
+import type { ProjectMeta, SourceMode, SourceService } from '@suite/shared';
+import { linkModeConflict } from '../core/linkedSprites';
 import { errorMessage } from '../core/messages';
 import { useEditor } from '../state/store';
 import { useEscape } from './shortcuts';
@@ -15,7 +16,8 @@ const formatDate = (t: number) => {
 type ListState = { status: 'loading' } | { status: 'ready'; projects: ProjectMeta[] } | { status: 'error'; message: string };
 
 /**
- * Picks a Klexel project and links its frames as sprites (one image per frame, auto-attached by name).
+ * Picks a Klexel project and links its frames - or, on request, its layers - as sprites (one image per frame or
+ * layer, auto-attached by name).
  * Linking is a normal edit (one undo step, store.linkSource); later refreshes are not (applyLinkedUpdate).
  */
 export function LinkSourceDialog({
@@ -30,6 +32,7 @@ export function LinkSourceDialog({
 }) {
   const [list, setList] = useState<ListState>({ status: 'loading' });
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<SourceMode>('frames');
   const [error, setError] = useState<string | null>(null);
   // Closed (Escape, Abbrechen, unmounted) while a read is pending: its result must not link anything anymore
   const closed = useRef(false);
@@ -60,7 +63,15 @@ export function LinkSourceDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await sources.read(m.id);
+      if (linkModeConflict(useEditor.getState().project, m.id, mode)) {
+        setError(
+          mode === 'layers'
+            ? `„${m.name}" ist bereits als Frames verknüpft. Entferne zuerst die verknüpften Sprites.`
+            : `„${m.name}" ist bereits als Ebenen verknüpft. Entferne zuerst die verknüpften Sprites.`,
+        );
+        return;
+      }
+      const result = await sources.read(m.id, mode);
       if (closed.current) return;
       if (!result) {
         setError(`„${m.name}" ist nicht mehr vorhanden oder nicht lesbar`);
@@ -81,7 +92,19 @@ export function LinkSourceDialog({
     <div className="dialog-backdrop">
       <div className="dialog link-source-dialog" role="dialog" aria-label="Sprites aus Klexel">
         <h2>Sprites aus Klexel</h2>
-        <p className="hint">Jeder Frame wird ein Sprite und bleibt mit Klexel verknüpft.</p>
+        <div className="link-source-mode" role="group" aria-label="Quelle der Sprites">
+          <button aria-pressed={mode === 'frames'} className={mode === 'frames' ? 'active' : ''} onClick={() => setMode('frames')}>
+            Frames
+          </button>
+          <button aria-pressed={mode === 'layers'} className={mode === 'layers' ? 'active' : ''} onClick={() => setMode('layers')}>
+            Ebenen
+          </button>
+        </div>
+        <p className="hint">
+          {mode === 'frames'
+            ? 'Jeder Frame wird ein Sprite und bleibt mit Klexel verknüpft.'
+            : 'Jede Ebene (aus dem ersten Frame) wird ein Sprite und bleibt mit Klexel verknüpft.'}
+        </p>
         {list.status === 'loading' && <p role="status">Lade Klexel-Projekte …</p>}
         {list.status === 'error' && (
           <div role="alert" className="error">

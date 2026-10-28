@@ -140,7 +140,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
   const toDataUrl = opts.toDataUrl ?? pixelsToDataUrl;
   const sources: SourceService | undefined = frameKinds.length === 0 ? undefined : {
     list: async () => (await store.list()).filter(m => frameKinds.some(d => d.kind === m.kind)),
-    async read(projectId) {
+    async read(projectId, mode = 'frames') {
       const meta = (await store.list()).find(m => m.id === projectId);
       const d = meta && frameKinds.find(k => k.kind === meta.kind);
       if (!meta || !d) return null;
@@ -149,10 +149,11 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
         try { await saveCurrent(); } catch (err) { console.error('Sichern vor dem Lesen der Quelle fehlgeschlagen', err); }
       }
       const payload = d.decode(await store.load(projectId));
-      const content = payload === null ? null : d.framesOf!(payload);
+      const content = payload === null ? null : d.framesOf!(payload, mode);
       if (!content) return null;
       return {
         projectName: meta.name || content.name,
+        ...(mode === 'layers' ? { mode } : {}),
         frames: content.frames.map(f => ({
           frameId: f.frameId, name: f.name, width: f.width, height: f.height,
           dataUrl: toDataUrl(f.width, f.height, f.pixels),

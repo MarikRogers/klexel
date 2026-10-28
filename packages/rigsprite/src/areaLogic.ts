@@ -1,6 +1,6 @@
 // DOM-freie Teile des Suite-Bereichs (testbar ohne React/DOM).
 import type { SourceService } from '@suite/shared';
-import { refreshLinkedImages } from './core/linkedSprites';
+import { linkModeOf, refreshLinkedImages } from './core/linkedSprites';
 import type { Project } from './core/project';
 import type { Transaction } from './state/store';
 
@@ -80,7 +80,7 @@ export async function syncLinkedSources(
     linkedSourceIds(target.getProject()).map(async (id) => {
       let result;
       try {
-        result = await sources.read(id);
+        result = await sources.read(id, linkModeOf(target.getProject(), id));
       } catch (err) {
         sum.failed++;
         onError(err, id);

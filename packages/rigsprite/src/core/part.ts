@@ -13,7 +13,10 @@ export interface ImageAsset {
 
 export interface ImageSource {
   projectId: string;
+  /** Frame id; with `layer` the layer id */
   frameId: number;
+  /** Linked per layer (Klexel layer) instead of per frame */
+  layer?: true;
   name?: string;
   missing?: true;
 }

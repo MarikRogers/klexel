@@ -90,6 +90,15 @@ describe('klexelDescriptor', () => {
       expect([...r.frames[0].pixels]).toEqual([0xff0000ff, 0x00ff00ff]);
     });
 
+    it('Modus Ebenen: ein Bild je Ebene aus dem ersten Frame, auch ausgeblendete', () => {
+      const { doc } = twoFrames();
+      doc.getLayer(2)!.visible = false;
+      const r = d.framesOf!(encodeKlexel(doc, [...PICO8], PICO8[0]), 'layers')!;
+      expect(r.frames.map(f => [f.frameId, f.name])).toEqual([[1, 'Ebene 1'], [2, 'oben']]);
+      expect([...r.frames[0].pixels]).toEqual([0xff0000ff, 0x00ff00ff]);
+      expect([...r.frames[1].pixels]).toEqual([0, 0x0000ffff]);
+    });
+
     it('Unlesbares → null', () => {
       for (const raw of [null, 42, 'x', {}, { version: 3, width: 'a' }]) expect(d.framesOf!(raw as never)).toBeNull();
     });

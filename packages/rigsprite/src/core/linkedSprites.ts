@@ -1,4 +1,4 @@
-import type { SourceFrame, SourceResult } from '@suite/shared';
+import type { SourceFrame, SourceMode, SourceResult } from '@suite/shared';
 import { newId } from './id';
 import type { ImageAsset } from './part';
 import type { Project } from './project';
@@ -10,7 +10,21 @@ export type { SourceFrame, SourceResult };
 
 const DEFAULT_NAME = /^Frame \d+$/;
 
-/** Frame ids of `projectId` that currently have an image. */
+/** How the images of `projectId` are linked: per layer if any of them is, else per frame (one mode per project). */
+export function linkModeOf(p: Project, projectId: string): SourceMode {
+  for (const img of Object.values(p.images)) {
+    if (img.source?.projectId === projectId && img.source.layer) return 'layers';
+  }
+  return 'frames';
+}
+
+/** True if `projectId` already has linked images in the other mode than `mode` (ids would clash). */
+export function linkModeConflict(p: Project, projectId: string, mode: SourceMode): boolean {
+  const linked = Object.values(p.images).some((i) => i.source?.projectId === projectId);
+  return linked && linkModeOf(p, projectId) !== mode;
+}
+
+/** Frame (or layer) ids of `projectId` that currently have an image. */
 function framesWithImage(p: Project, projectId: string): Set<number> {
   const ids = new Set<number>();
   for (const img of Object.values(p.images)) {
@@ -45,7 +59,7 @@ function newImages(p: Project, projectId: string, source: SourceResult, rebuild:
       dataUrl: f.dataUrl,
       width: f.width,
       height: f.height,
-      source: { projectId, frameId: f.frameId, name: f.name || undefined },
+      source: { projectId, frameId: f.frameId, ...(source.mode === 'layers' ? { layer: true as const } : {}), name: f.name || undefined },
     });
   });
   return out;
@@ -118,7 +132,7 @@ export function refreshLinkedImages(
       updated.push(id);
     }
     if (link.missing) {
-      next = { ...next, source: { projectId: link.projectId, frameId: link.frameId, name: link.name } };
+      next = { ...next, source: { projectId: link.projectId, frameId: link.frameId, ...(link.layer ? { layer: true as const } : {}), name: link.name } };
       if (link.name === undefined) delete next.source!.name;
     }
     // Name sync: the image follows the frame name only if the user did not rename it. "Not renamed" means the

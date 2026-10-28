@@ -1,6 +1,6 @@
 import type { ProjectKind } from './workspace/types';
 import type { Area, NewProjectInit } from './area';
-import type { PixelFrame } from './sources';
+import type { PixelFrame, SourceMode } from './sources';
 import type { FramesDocInput } from './returnDoc';
 
 /**
@@ -33,9 +33,9 @@ export interface AreaDescriptor<P> {
   /**
    * Frames eines gespeicherten Inhalts als Pixel (DOM-frei), damit andere Bereiche sie als Bilder verwenden können
    * (Klexel → Rigsprite). name = Anzeigename aus dem Inhalt, falls er einen hat (sonst leer; die Hülle nimmt dann den
-   * Projektnamen). null = nicht lesbar. Fehlt bei Arten, die keine Frames liefern.
+   * Projektnamen). mode 'layers': je Ebene ein Bild (aus dem ersten Frame; frameId = Ebenen-ID). null = nicht lesbar. Fehlt bei Arten, die keine Frames liefern.
    */
-  framesOf?(payload: P): { name: string; frames: PixelFrame[] } | null;
+  framesOf?(payload: P, mode?: SourceMode): { name: string; frames: PixelFrame[] } | null;
   /**
    * Neuer Inhalt aus Einzelbildern (DOM-frei; Rigsprite → Klexel): ein Frame je Bild. Wirft RangeError, wenn
    * Größe oder Anzahl die Grenzen dieser Art überschreiten. Fehlt bei Arten, die so nichts anlegen können.

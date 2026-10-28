@@ -146,12 +146,14 @@ function parseBones(raw: unknown): Bone[] {
 /** A structurally valid link, else undefined (an invalid link never fails the image). */
 function parseSource(v: unknown): ImageSource | undefined {
   if (!isObj(v)) return undefined;
-  const { projectId, frameId, name, missing } = v;
+  const { projectId, frameId, name, missing, layer } = v;
   if (!isStr(projectId) || projectId === '') return undefined;
   if (typeof frameId !== 'number' || !Number.isInteger(frameId) || frameId <= 0) return undefined;
   if (name !== undefined && !isStr(name)) return undefined;
   if (missing !== undefined && missing !== true) return undefined;
+  if (layer !== undefined && layer !== true) return undefined;
   const out: ImageSource = { projectId, frameId };
+  if (layer) out.layer = true;
   if (name !== undefined) out.name = name;
   if (missing) out.missing = true;
   return out;

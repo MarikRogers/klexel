@@ -220,7 +220,7 @@ describe('rigspriteArea mit Klexel-Quellen', () => {
     act(() => handle!.open(p));
     await flushAsync();
     expect(read).toHaveBeenCalledTimes(1);
-    expect(read).toHaveBeenCalledWith('k1');
+    expect(read).toHaveBeenCalledWith('k1', 'frames');
     expect(headUrl()).toBe('data:image/png;base64,B');
     expect(useEditor.temporal.getState().pastStates).toHaveLength(0);
     expect(host.onChange).toHaveBeenCalled();

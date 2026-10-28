@@ -40,6 +40,24 @@ beforeEach(() => useEditor.getState().loadProject(createProject('humanoid')));
 afterEach(cleanup);
 
 describe('LinkSourceDialog', () => {
+  it('im Modus Ebenen liest er Ebenen und markiert die Bilder als Ebenen-Verknüpfung', async () => {
+    const sources = fakeSources();
+    sources.read = vi.fn(async () => ({
+      projectName: 'Figur',
+      mode: 'layers' as const,
+      frames: [{ frameId: 3, name: 'Kopf', width: 2, height: 2, dataUrl: 'data:image/png;base64,AA' }],
+    }));
+    render(<LinkSourceDialog sources={sources} onClose={vi.fn()} onLinked={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ebenen' }));
+    fireEvent.click(screen.getByRole('button', { name: /Figur/ }));
+    await waitFor(() => expect(sources.read).toHaveBeenCalledWith('k1', 'layers'));
+    await waitFor(() =>
+      expect(Object.values(useEditor.getState().project.images).map((i) => i.source)).toEqual([
+        { projectId: 'k1', frameId: 3, layer: true, name: 'Kopf' },
+      ]),
+    );
+  });
+
   it('listet die Klexel-Projekte mit Datum; Auswahl verknüpft die Frames und meldet die Anzahl', async () => {
     const sources = fakeSources();
     const onClose = vi.fn();
@@ -50,7 +68,7 @@ describe('LinkSourceDialog', () => {
     expect(item.textContent).toMatch(/28\.10\.26/);
     fireEvent.click(item);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(sources.read).toHaveBeenCalledWith('k1');
+    expect(sources.read).toHaveBeenCalledWith('k1', 'frames');
     expect(onLinked).toHaveBeenCalledWith(2, 'Figur');
     const imgs = Object.values(useEditor.getState().project.images);
     expect(imgs.map((i) => i.source)).toEqual([
