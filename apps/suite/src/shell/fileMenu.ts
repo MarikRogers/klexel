@@ -1,6 +1,7 @@
 import type { WorkspaceStore } from '@suite/shared';
 import { exportWorkspace, importWorkspace } from '@suite/shared';
 import { saveBlob, showToast } from '@suite/shared/ui';
+import { classifyProjectFile } from './classifyProjectFile';
 
 export interface FileActions {
   exportAll(): Promise<void>;
@@ -36,6 +37,26 @@ export function createFileActions(deps: FileActionDeps): FileActions {
       throw err;
     }
   };
+  /** Eigenständige Rigsprite-Projektdatei (Umzug aus dem alten Rigsprite): als neues Projekt, ohne es zu öffnen. */
+  async function addRigspriteProject(raw: Record<string, unknown>): Promise<number> {
+    if (!deps.isKnownKind('rigsprite')) {
+      showToast('Diese Datei ist ein Rigsprite-Projekt, aber Rigsprite ist in dieser Version nicht enthalten.', 6000);
+      return 0;
+    }
+    if (!deps.validatePayload('rigsprite', raw)) {
+      showToast('Das Rigsprite-Projekt ist beschädigt und konnte nicht geladen werden', 5000);
+      return 0;
+    }
+    try {
+      const name = (typeof raw.name === 'string' ? raw.name.trim() : '').slice(0, 60).trim() || 'Unbenannt';
+      await store.add({ kind: 'rigsprite', name, updatedAt: Date.now() }, raw);
+      showToast('Rigsprite-Projekt hinzugefügt', 2500);
+      return 1;
+    } catch {
+      showToast('Die Datei konnte nicht gespeichert werden', 5000);
+      return 0;
+    }
+  }
   return {
     async exportAll() {
       await prepare();
@@ -51,6 +72,9 @@ export function createFileActions(deps: FileActionDeps): FileActions {
         showToast('Die Datei konnte nicht gelesen werden', 4000);
         return 0;
       }
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      if (classifyProjectFile(parsed) === 'rigsprite-project') return addRigspriteProject(parsed as Record<string, unknown>);
       try {
         const r = await importWorkspace(store, text, deps.isKnownKind, deps.validatePayload);
         const n = r.added.length;
