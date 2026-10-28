@@ -1,0 +1,111 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px system-ui, sans-serif; background: #1e1f24; color: #e6e6e6; }
+.app {
+  position: fixed; inset: 0; display: grid;
+  grid-template-columns: 220px 1fr 240px; grid-template-rows: 40px 1fr 160px;
+  grid-template-areas: "tb tb tb" "left center right" "tl tl tl";
+}
+.toolbar { grid-area: tb; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: #2a2c33; border-bottom: 1px solid #111; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+.toolbar > *, .toolbar .tb-group > * { flex: none; }
+.toolbar .tb-group { display: flex; align-items: center; gap: 6px; }
+.toolbar button, .toolbar label { white-space: nowrap; }
+.toolbar input[aria-label="Projektname"] { width: 10em; }
+.toolbar .tb-logo { display: block; image-rendering: pixelated; }
+.toolbar .sep { width: 1px; height: 20px; background: #444; margin: 0 4px; }
+.left { grid-area: left; overflow-y: auto; background: #25262c; border-right: 1px solid #111; }
+.right { grid-area: right; overflow-y: auto; background: #25262c; border-left: 1px solid #111; }
+.center { grid-area: center; position: relative; min-width: 0; min-height: 0; }
+.timeline { grid-area: tl; background: #25262c; border-top: 1px solid #111; }
+.panel { padding: 8px; }
+.panel h2 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; opacity: 0.7; }
+.panel h3 { margin: 6px 0; font-size: 13px; }
+.row { display: flex; gap: 4px; margin: 4px 0; }
+.field { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; gap: 6px; }
+.field input[type="number"], .field input[type="text"] { width: 110px; }
+button { background: #3a3d46; color: inherit; border: 1px solid #555; border-radius: 3px; padding: 3px 8px; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+button[aria-pressed="true"] { background: #4a6fa5; }
+.bone-tree, .sprite-list { list-style: none; margin: 4px 0; padding: 0; }
+.bone-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; }
+.bone-item.selected { background: #4a6fa5; }
+.sprite-list li { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+.sprite-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sprite-bone { opacity: 0.8; }
+.error { color: #ff8a8a; margin: 4px 0; }
+/* Floating "Ansicht" panel (orbit presets / steps, layer spacing) in the viewport's top right corner. */
+.orbit-panel { position: absolute; top: 8px; right: 8px; z-index: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: #2a2c33e6; border: 1px solid #444; border-radius: 4px; touch-action: none; user-select: none; }
+.orbit-panel input { user-select: text; }
+.orbit-toggle { align-self: flex-end; }
+.orbit-row { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.orbit-row button { min-width: 28px; }
+.orbit-angles { margin-left: 4px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.drop-error { position: absolute; left: 8px; bottom: 8px; background: #000a; padding: 4px 8px; }
+.hint { opacity: 0.6; }
+.dialog-backdrop { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.dialog { background: #2a2c33; padding: 16px; border-radius: 6px; min-width: 260px; }
+.dialog-templates { display: flex; gap: 8px; margin-bottom: 12px; }
+.timeline { overflow: hidden; }
+.timeline-inner { height: 100%; display: flex; flex-direction: column; position: relative; }
+.timeline-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid #111; flex-wrap: wrap; }
+.timeline-head input[type="text"] { width: 100px; }
+.timeline-head input[type="number"] { width: 56px; }
+.timeline-empty { padding: 8px; }
+.template-wrap { position: relative; }
+.template-menu { position: absolute; top: 100%; left: 0; z-index: 5; list-style: none; margin: 0; padding: 4px; background: #2a2c33; border: 1px solid #555; }
+.template-menu button { display: block; width: 100%; text-align: left; }
+.timeline-grid { flex: 1; min-height: 0; overflow: auto; }
+.timeline-scroll { position: relative; }
+.tl-row { display: flex; height: 20px; border-bottom: 1px solid #1c1d22; }
+.tl-row.selected { background: #2f3340; }
+.tl-ruler { position: sticky; top: 0; background: #25262c; z-index: 2; }
+.tl-name { width: 110px; /* NAME_COLUMN_WIDTH */ flex: none; padding: 0 6px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: sticky; left: 0; background-color: #25262c; z-index: 1; cursor: pointer; }
+.tl-cells { position: relative; flex: none; height: 20px; }
+.tl-frame { position: absolute; top: 0; height: 20px; border-left: 1px solid #333; font-size: 10px; line-height: 20px; padding-left: 2px; cursor: pointer; }
+.tl-frame.current { background: #4a6fa533; }
+.tl-playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff6b6b; pointer-events: none; }
+.tl-key { position: absolute; top: 5px; width: 10px; height: 10px; margin-left: -5px; background: #e6c15a; transform: rotate(45deg) scale(0.8); cursor: ew-resize; }
+.tl-key.selected { background: #fff; outline: 1px solid #4a9eff; }
+.easing-menu { position: fixed; z-index: 20; list-style: none; margin: 0; padding: 4px; background: #2a2c33; border: 1px solid #555; }
+.easing-menu button { display: block; width: 100%; text-align: left; }
+.open-error { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); background: #000d; padding: 4px 8px; z-index: 10; }
+.sheet-dialog { min-width: 340px; max-width: 520px; }
+.sheet-dialog label { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+.sheet-dialog input[type='number'] { width: 64px; }
+.sheet-preview { max-width: 100%; max-height: 220px; border: 1px solid #444; background: #1c1d22; margin: 8px 0; }
+.dialog-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Touch: the ruler and diamonds take every gesture; the bone rows still scroll vertically. */
+.tl-ruler .tl-cells, .tl-key { touch-action: none; }
+.timeline-grid { touch-action: pan-x pan-y; }
+.panel-bar, .drawer-scrim { display: none; }
+
+/* Phone layout: viewport fills the middle, side panels become overlays toggled from the panel bar. */
+@media (max-width: 767.98px) {
+  .app {
+    grid-template-columns: 1fr; grid-template-rows: 48px 44px 1fr 35%;
+    grid-template-areas: "tb" "pb" "center" "tl";
+  }
+  .panel-bar { grid-area: pb; display: flex; gap: 6px; align-items: center; padding: 0 8px; background: #2a2c33; border-bottom: 1px solid #111; }
+  .panel-bar button { flex: 1; }
+  .left, .right { position: absolute; top: 92px; bottom: 35%; width: min(85vw, 320px); z-index: 8; display: none; box-shadow: 0 0 12px #000a; }
+  .left { left: 0; }
+  .right { right: 0; }
+  .app.left-open .left, .app.right-open .right { display: block; }
+  /* tap outside an open drawer closes it; the panel bar stays usable */
+  .drawer-scrim { display: block; position: absolute; top: 92px; left: 0; right: 0; bottom: 0; z-index: 7; background: #0006; }
+  button, select, input:not([type="checkbox"]):not([type="radio"]) { min-height: 36px; }
+  .timeline { overflow: auto; }
+  /* finger-sized orbit buttons, smaller font so the panel stays compact */
+  .orbit-panel { top: 6px; right: 6px; padding: 4px; font-size: 12px; }
+  .orbit-row button { min-width: 36px; padding: 3px 6px; }
+  .timeline-head { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; }
+  .timeline-head > * { flex: none; }
+  .tl-row, .tl-cells, .tl-frame { height: 36px; }
+  .tl-name, .tl-frame { line-height: 36px; }
+  /* 36 px tall touch target around the diamond (drawn by ::before), one frame cell wide
+     (--cell is set on .timeline-inner from CELL_PHONE) and centred on the key frame */
+  .tl-key { top: 0; width: var(--cell); height: 36px; margin-left: calc(var(--cell) / -2); background: transparent; transform: none; }
+  .tl-key::before { content: ""; position: absolute; left: calc((var(--cell) - 10px) / 2); top: 13px; width: 10px; height: 10px; background: #e6c15a; transform: rotate(45deg) scale(0.8); }
+  .tl-key.selected { background: transparent; outline: none; }
+  .tl-key.selected::before { background: #fff; outline: 1px solid #4a9eff; }
+}
