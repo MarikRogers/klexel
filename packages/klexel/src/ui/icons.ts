@@ -26,6 +26,8 @@ export const ICON = {
   frames: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14"/><path d="M3 9.5h5M3 14.5h5M16 9.5h5M16 14.5h5"/>'),
   addFrame: svg('<rect x="3" y="6" width="14" height="12" rx="2"/><path d="M20 9v6M17 12h6"/>'),
   duplicateFrame: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/><path d="M14 11v6M11 14h6"/>'),
+  // Umbenennen: Stift über einer Linie
+  rename: svg('<path d="M4 20h16"/><path d="M14.5 4.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z"/>'),
   left: svg('<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>'),
   right: svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
   play: svg('<path d="M7 4.5v15l12-7.5z"/>'),

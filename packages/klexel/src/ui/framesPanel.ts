@@ -2,7 +2,7 @@ import { PixelDocument, frameActions, MAX_FRAMES } from '../model/Document';
 import { History } from '../model/History';
 import { ICON } from './icons';
 import { drawThumb } from './thumb';
-import { frameLabel } from './frameLabel';
+import { frameLabel, frameTitle, askFrameRename } from './frameLabel';
 import { nextPlaybackIndex } from '../render/onion';
 import { renderSheet, frameFiles, sheetLayout, sheetTooLarge, type SheetMode } from '../export/sheet';
 import { buildZip } from '../export/zip';
@@ -36,6 +36,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     <div class="frames-actions row">
       <button data-act="add" title="Frame hinzufügen">${ICON.addFrame}</button>
       <button data-act="duplicate" title="Frame duplizieren">${ICON.duplicateFrame}</button>
+      <button data-act="rename" title="Frame umbenennen" aria-label="Frame umbenennen">${ICON.rename}</button>
       <button data-act="remove" title="Frame löschen">${ICON.trash}</button>
       <button data-act="left" title="Nach links">${ICON.left}</button>
       <button data-act="right" title="Nach rechts">${ICON.right}</button>
@@ -217,12 +218,10 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
     drawThumb(tile.querySelector('canvas')!, d.compositeFrame(frameId), d.width, d.height);
   }
 
+  // Umbenennen (Knopf „Frame umbenennen" für den aktuellen Frame; Antippen des Namens der aktiven Kachel als Abkürzung)
   function rename(frameId: number): void {
-    const frame = doc().frames.find((f) => f.id === frameId);
-    if (!frame) return;
-    const name = window.prompt('Name des Frames (leer = Nummer)', frame.name ?? '');
-    if (name === null) return;
-    run(() => history().renameFrame(frameId, name));
+    askFrameRename(doc().frames, frameId, (msg, cur) => window.prompt(msg, cur),
+      (id, name) => run(() => history().renameFrame(id, name)));
   }
 
   function buildTiles(d: PixelDocument): void {
@@ -231,7 +230,9 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
       const tile = document.createElement('button');
       tile.className = 'frame-tile' + (frame.id === d.currentFrameId ? ' active' : '');
       tile.dataset.id = String(frame.id);
-      tile.title = frame.name ? `Frame ${i + 1}: ${frame.name}` : `Frame ${i + 1}`;
+      tile.title = frameTitle(frame, i);
+      tile.setAttribute('aria-label', frameTitle(frame, i));
+      if (frame.id === d.currentFrameId) tile.setAttribute('aria-current', 'true');
       const thumb = document.createElement('canvas');
       thumb.width = thumb.height = 24;
       const num = document.createElement('span');
@@ -294,6 +295,7 @@ export function createFramesPanel(deps: FramesPanelDeps): FramesPanel {
 
   act('add').onclick = () => grow(() => history().addFrame());
   act('duplicate').onclick = () => grow(() => history().duplicateFrame());
+  act('rename').onclick = () => rename(doc().currentFrameId);
   act('remove').onclick = () => run(() => history().removeFrame());
   act('left').onclick = () => run(() => history().moveFrame(-1));
   act('right').onclick = () => run(() => history().moveFrame(1));
