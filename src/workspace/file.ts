@@ -14,12 +14,22 @@ export interface ImportResult {
 
 const FORMAT = 'klexel-workspace';
 const TAG = '$typed';
+const ESC = '$escaped';
 const CHUNK = 0x8000;
+const MAX_NAME = 60, MAX_KIND = 32, MAX_THUMB = 200_000;
+const THUMB_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 
-const ARRAYS: Record<string, new (buf: ArrayBuffer) => ArrayBufferView> = {
-  Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array,
-  Float32Array, Float64Array,
-};
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+// Whitelist; der Typ wird per instanceof bestimmt (nicht per constructor.name)
+const TYPES: Array<[string, { new (buf: ArrayBuffer): ArrayBufferView; BYTES_PER_ELEMENT: number }]> = [
+  ['Int8Array', Int8Array], ['Uint8Array', Uint8Array], ['Uint8ClampedArray', Uint8ClampedArray],
+  ['Int16Array', Int16Array], ['Uint16Array', Uint16Array], ['Int32Array', Int32Array], ['Uint32Array', Uint32Array],
+  ['Float32Array', Float32Array], ['Float64Array', Float64Array],
+];
+
+/** Platzhalter für einen nicht lesbaren Typed-Array-Eintrag; macht nur das betroffene Projekt unlesbar. */
+class Bad { }
 
 function toBase64(bytes: Uint8Array): string {
   let s = '';
@@ -27,31 +37,58 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-function fromBase64(b64: string): ArrayBuffer {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
+function fromBase64(b64: string): ArrayBuffer | null {
+  if (b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return null;
+  try {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  } catch { return null; }
 }
 
-// Typed Arrays gehen nicht durch JSON: als { $typed, b64 } (Bytes in Systemreihenfolge, praktisch little-endian) sichern
+// Typed Arrays gehen nicht durch JSON: als { $typed, b64 } (Bytes in Systemreihenfolge, praktisch little-endian) sichern.
+// Echte Objekte mit Schlüssel $typed/$escaped werden als { $escaped: [[Schlüssel, Wert], ...] } maskiert.
 function replacer(_key: string, value: unknown): unknown {
-  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
-    const name = value.constructor.name;
-    if (name in ARRAYS) {
-      return { [TAG]: name, b64: toBase64(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) };
+  if (ArrayBuffer.isView(value)) {
+    for (const [name, Ctor] of TYPES) {
+      if (value instanceof Ctor) return { [TAG]: name, b64: toBase64(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) };
     }
+    throw new Error('Dieser Datentyp lässt sich nicht in einer Datei sichern');
+  }
+  if (isObj(value) && (Object.hasOwn(value, TAG) || Object.hasOwn(value, ESC))) {
+    return { [ESC]: Object.entries(value) };
   }
   return value;
 }
 
 function reviver(_key: string, value: unknown): unknown {
-  if (value && typeof value === 'object' && typeof (value as Record<string, unknown>)[TAG] === 'string') {
-    const o = value as Record<string, unknown>;
-    const Ctor = ARRAYS[o[TAG] as string];
-    if (Ctor && typeof o.b64 === 'string') return new Ctor(fromBase64(o.b64));
+  if (!isObj(value)) return value;
+  if (Object.hasOwn(value, ESC) && Array.isArray(value[ESC])) {
+    const out: Record<string, unknown> = {};
+    for (const e of value[ESC] as unknown[]) {
+      if (Array.isArray(e) && typeof e[0] === 'string') Object.defineProperty(out, e[0], { value: e[1], enumerable: true, writable: true, configurable: true });
+    }
+    return out;
+  }
+  if (typeof value[TAG] === 'string') {
+    const t = TYPES.find(x => x[0] === value[TAG]);
+    const buf = t && typeof value.b64 === 'string' ? fromBase64(value.b64) : null;
+    if (!t || !buf || buf.byteLength % t[1].BYTES_PER_ELEMENT !== 0) return new Bad();
+    return new t[1](buf);
   }
   return value;
+}
+
+function hasBad(root: unknown): boolean {
+  const stack: unknown[] = [root];
+  while (stack.length) {
+    const v = stack.pop();
+    if (v instanceof Bad) return true;
+    if (ArrayBuffer.isView(v) || !v || typeof v !== 'object') continue;
+    for (const c of Object.values(v)) stack.push(c);
+  }
+  return false;
 }
 
 /** Sichert alle (oder die genannten) Projekte als JSON-Datei. */
@@ -67,8 +104,6 @@ export async function exportWorkspace(store: WorkspaceStore, ids?: string[]): Pr
   const file: WorkspaceFile = { format: FORMAT, version: 1, projects };
   return new Blob([JSON.stringify(file, replacer)], { type: 'application/json' });
 }
-
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * Fügt die Projekte der Datei mit neuen IDs hinzu (ersetzt nie etwas). Wirft bei unlesbarer oder zu neuer Datei,
@@ -89,16 +124,16 @@ export async function importWorkspace(
   const added: ProjectMeta[] = [];
   const rejected: ImportResult['rejected'] = [];
   for (const raw of data.projects as unknown[]) {
-    const name = isObj(raw) && typeof raw.name === 'string' ? raw.name : 'Unbenannt';
+    const name = cleanName(isObj(raw) ? raw.name : undefined);
     const reason = check(raw, isKnownKind, validatePayload);
     if (reason) { rejected.push({ name, reason }); continue; }
     const p = raw as WorkspaceFile['projects'][number];
     const meta: Omit<ProjectMeta, 'id'> = {
       kind: p.kind as ProjectKind,
-      name: p.name,
+      name,
       updatedAt: typeof p.updatedAt === 'number' && isFinite(p.updatedAt) ? p.updatedAt : Date.now(),
     };
-    if (typeof p.thumbnail === 'string') meta.thumbnail = p.thumbnail;
+    if (typeof p.thumbnail === 'string' && p.thumbnail.length <= MAX_THUMB && THUMB_RE.test(p.thumbnail)) meta.thumbnail = p.thumbnail;
     if (isObj(p.origin) && typeof p.origin.rigProjectId === 'string' && typeof p.origin.animationId === 'string') {
       meta.origin = { rigProjectId: p.origin.rigProjectId, animationId: p.origin.animationId };
     }
@@ -107,11 +142,16 @@ export async function importWorkspace(
   return { added, rejected };
 }
 
+function cleanName(v: unknown): string {
+  return (typeof v === 'string' ? v.trim() : '').slice(0, MAX_NAME).trim() || 'Unbenannt';
+}
+
 function check(raw: unknown, isKnownKind: (k: string) => boolean, validate?: (k: string, p: unknown) => boolean): string | null {
   if (!isObj(raw)) return 'Eintrag ist kein Projekt';
-  if (typeof raw.kind !== 'string' || !raw.kind) return 'Art fehlt oder ist ungültig';
+  if (typeof raw.kind !== 'string' || !raw.kind || raw.kind.length > MAX_KIND) return 'Art fehlt oder ist ungültig';
   if (typeof raw.name !== 'string') return 'Name fehlt oder ist ungültig';
   if (!('payload' in raw) || raw.payload === undefined) return 'Inhalt fehlt';
+  if (hasBad(raw.payload)) return 'Inhalt ist nicht lesbar';
   if (isKnownKind(raw.kind) && validate && !validate(raw.kind, raw.payload)) return 'Inhalt ist nicht lesbar';
   return null;
 }

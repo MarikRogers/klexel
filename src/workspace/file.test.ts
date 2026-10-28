@@ -81,7 +81,7 @@ describe('Workspace-Datei', () => {
   it('unbekannte Art bleibt erhalten und überlebt Export/Import', async () => {
     const a = mk();
     const file = { format: 'klexel-workspace', version: 1, projects: [
-      { kind: 'zukunft', name: 'Z', updatedAt: 7, thumbnail: 'data:x', payload: { q: [1] } },
+      { kind: 'zukunft', name: 'Z', updatedAt: 7, thumbnail: 'data:image/png;base64,AAAA', payload: { q: [1] } },
     ] };
     const r = await importWorkspace(a, JSON.stringify(file), () => false);
     expect(r.added[0].kind).toBe('zukunft');
@@ -90,7 +90,7 @@ describe('Workspace-Datei', () => {
     const [m] = await b.list();
     expect(m.kind).toBe('zukunft' as ProjectKind);
     expect(m.updatedAt).toBe(7);
-    expect(m.thumbnail).toBe('data:x');
+    expect(m.thumbnail).toBe('data:image/png;base64,AAAA');
     expect(await b.load(m.id)).toEqual({ q: [1] });
   });
 
@@ -117,5 +117,68 @@ describe('Workspace-Datei', () => {
     expect(out.big.length).toBe(1_000_000);
     expect(out.big.every((v, i) => v === big[i])).toBe(true);
     expect(out.f).toBeInstanceOf(Float32Array);
+  });
+});
+
+describe('Workspace-Datei: Robustheit', () => {
+  const entry = (name: string, payload: unknown, extra: object = {}) => ({ kind: 'klexel', name, updatedAt: 1, payload, ...extra });
+  const file = (projects: unknown[]) => JSON.stringify({ format: 'klexel-workspace', version: 1, projects });
+
+  it.each([
+    ['ungültiges Base64', { $typed: 'Uint32Array', b64: '!!!!' }],
+    ['5 Bytes für Uint32Array', { $typed: 'Uint32Array', b64: btoa('abcde') }],
+    ['unbekannter Typ', { $typed: 'Foo', b64: 'AAAA' }],
+  ])('%s: nur dieses Projekt abgelehnt', async (_n, bad) => {
+    const a = mk();
+    const r = await importWorkspace(a, file([entry('A', { v: 1 }), entry('Kaputt', { deep: [{ x: bad }] }), entry('C', { v: 3 })]), known);
+    expect(r.added.map(m => m.name)).toEqual(['A', 'C']);
+    expect(r.rejected).toEqual([{ name: 'Kaputt', reason: 'Inhalt ist nicht lesbar' }]);
+  });
+
+  it('BigInt64Array wird beim Export abgelehnt', async () => {
+    const a = mk();
+    await a.create('klexel', 'B', { b: new BigInt64Array(2) });
+    await expect(exportWorkspace(a)).rejects.toThrow();
+  });
+
+  it('Objekte mit $typed/$escaped-Schlüssel überstehen den Round-Trip', async () => {
+    const a = mk();
+    const payload = { o: { $typed: 'Uint32Array', b64: 'AAAA' }, e: { $escaped: [1, 2], z: new Uint8Array([9]) } };
+    await a.create('klexel', 'K', payload);
+    const b = mk();
+    await importWorkspace(b, await text(await exportWorkspace(a)), known);
+    expect(await b.load((await b.list())[0].id)).toEqual(payload);
+  });
+
+  it('subarray-View wird nur mit seinem Ausschnitt gesichert', async () => {
+    const a = mk();
+    await a.create('klexel', 'S', { v: new Uint32Array([1, 2, 3, 4]).subarray(1, 3) });
+    const b = mk();
+    await importWorkspace(b, await text(await exportWorkspace(a)), known);
+    const out = (await b.load((await b.list())[0].id)) as { v: Uint32Array };
+    expect(Array.from(out.v)).toEqual([2, 3]);
+  });
+
+  it('Vorschaubild: nur PNG/JPEG/WebP-Data-URL bleibt', async () => {
+    const a = mk();
+    await importWorkspace(a, file([
+      entry('http', 1, { thumbnail: 'http://evil/x.png' }),
+      entry('svg', 1, { thumbnail: 'data:image/svg+xml;base64,PHN2Zz4=' }),
+      entry('gross', 1, { thumbnail: 'data:image/png;base64,' + 'A'.repeat(200_001) }),
+      entry('png', 1, { thumbnail: 'data:image/png;base64,iVBORw0KGgo=' }),
+    ]), known);
+    const list = await a.list();
+    expect(list).toHaveLength(4);
+    expect(list.filter(m => m.thumbnail).map(m => m.name)).toEqual(['png']);
+  });
+
+  it('Name wird bereinigt, zu lange Art abgelehnt, Doppelte bleiben doppelt', async () => {
+    const a = mk();
+    const r = await importWorkspace(a, file([
+      entry('  ', 1), entry('x'.repeat(100), 1), entry('D', 1), entry('D', 1),
+      { ...entry('Z', 1), kind: 'k'.repeat(33) },
+    ]), known);
+    expect(r.added.map(m => m.name)).toEqual(['Unbenannt', 'x'.repeat(60), 'D', 'D']);
+    expect(r.rejected).toHaveLength(1);
   });
 });

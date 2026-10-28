@@ -21,7 +21,8 @@ export interface FileActionDeps {
 /** Dateiname ohne verbotene Zeichen (Windows/Unix), nie leer. */
 export function sanitizeFileName(name: string): string {
   // eslint-disable-next-line no-control-regex
-  const s = name.replace(/[\/:*?"<>|\u0000-\u001f]/g, '_').trim().replace(/^\.+/, '').replace(/[. ]+$/, '').slice(0, 80);
+  let s = name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').trim().replace(/^\.+/, '').replace(/[. ]+$/, '').slice(0, 80).trim();
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(s)) s = `_${s}`;
   return s || 'Projekt';
 }
 
