@@ -44,19 +44,33 @@ export class WorkspaceStore {
     return (await this.readIndex()).reverse().sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async create(kind: ProjectKind, name: string, payload: unknown): Promise<ProjectMeta> {
-    const meta: ProjectMeta = { id: newProjectId(), kind, name, updatedAt: this.tick() };
-    await this.kv.set(pKey(meta.id), payload);
-    await this.updateIndex(idx => { idx.push(meta); });
-    return { ...meta };
+  /** Neuer Zeitstempel über allen vergebenen und allen im Index (z. B. von einem anderen Tab oder früheren Sitzungen). */
+  private nextStamp(idx: ProjectMeta[]): number {
+    return this.tick(idx.reduce((m, x) => Math.max(m, x.updatedAt), 0));
   }
 
-  /** Legt ein Projekt mit neuer ID an und behält Art, Datum, Vorschau und Herkunft aus `src` (Dateiimport). */
+  async create(kind: ProjectKind, name: string, payload: unknown): Promise<ProjectMeta> {
+    const id = newProjectId();
+    return this.updateIndex(async idx => {
+      const meta: ProjectMeta = { id, kind, name, updatedAt: this.nextStamp(idx) };
+      await this.kv.set(pKey(id), payload);
+      idx.push(meta);
+      return { ...meta };
+    });
+  }
+
+  /**
+   * Legt ein Projekt mit neuer (oder der angegebenen) ID an und behält Art, Datum, Vorschau und Herkunft aus `src`
+   * (Dateiimport). Eine schon vorhandene ID wird abgelehnt, bevor etwas geschrieben wird.
+   */
   async add(src: Omit<ProjectMeta, 'id'>, payload: unknown, id: string = newProjectId()): Promise<ProjectMeta> {
-    const meta: ProjectMeta = { ...src, id };
-    await this.kv.set(pKey(meta.id), payload);
-    await this.updateIndex(idx => { idx.push(meta); });
-    return { ...meta };
+    return this.updateIndex(async idx => {
+      if (idx.some(x => x.id === id)) throw new Error(`Projekt-ID ${id} ist schon vergeben`);
+      const meta: ProjectMeta = { ...src, id };
+      await this.kv.set(pKey(id), payload);
+      idx.push(meta);
+      return { ...meta };
+    });
   }
 
   async load(id: string): Promise<unknown | null> {
@@ -89,10 +103,13 @@ export class WorkspaceStore {
     const src = (await this.list()).find(m => m.id === id);
     if (!src) throw new Error(`Projekt ${id} nicht gefunden`);
     const payload = await this.load(id);
-    const meta: ProjectMeta = { ...src, id: newProjectId(), name: `${src.name} (Kopie)`, updatedAt: this.tick() };
-    await this.kv.set(pKey(meta.id), payload);
-    await this.updateIndex(idx => { idx.push(meta); });
-    return { ...meta };
+    const newId = newProjectId();
+    return this.updateIndex(async idx => {
+      const meta: ProjectMeta = { ...src, id: newId, name: `${src.name} (Kopie)`, updatedAt: this.nextStamp(idx) };
+      await this.kv.set(pKey(newId), payload);
+      idx.push(meta);
+      return { ...meta };
+    });
   }
 
   async remove(id: string): Promise<void> {

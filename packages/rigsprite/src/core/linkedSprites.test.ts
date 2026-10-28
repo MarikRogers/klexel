@@ -247,5 +247,23 @@ describe('remapSourceIds', () => {
     const p = { ...createProject('humanoid'), linkedFrames: { a: [3, 1], b: [2, 3] } };
     const out = remapSourceIds(p, new Map([['a', 'z'], ['b', 'z']]));
     expect(out.linkedFrames).toEqual({ z: [1, 2, 3] });
+  });});
+
+describe('remapSourceIds: robust', () => {
+  it('Nutzlast ohne images wirft nicht', () => {
+    const p = { ...createProject('humanoid'), linkedFrames: { a: [1] } } as Record<string, unknown>;
+    delete p.images;
+    const out = remapSourceIds(p as unknown as Project, new Map([['a', 'b']]));
+    expect(out.linkedFrames).toEqual({ b: [1] });
+    expect(remapSourceIds(p as unknown as Project, new Map())).toBe(p);
+  });
+
+  it('linkedFrames-Schlüssel wie constructor/__proto__ führen nicht zu Fehlern', () => {
+    const lf = JSON.parse('{"constructor":[1],"toString":[3],"A-alt":[2],"__proto__":[4]}');
+    const p = { ...createProject('humanoid'), linkedFrames: lf };
+    const out = remapSourceIds(p, new Map([['A-alt', 'B'], ['toString', 'constructor']]));
+    expect(Object.keys(out.linkedFrames!).sort()).toEqual(['B', '__proto__', 'constructor']);
+    expect(out.linkedFrames!['B']).toEqual([2]);
+    expect(out.linkedFrames!['constructor']).toEqual([1, 3]);
   });
 });

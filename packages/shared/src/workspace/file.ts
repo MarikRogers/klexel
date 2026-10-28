@@ -148,8 +148,9 @@ export async function importWorkspace(
     if (isObj(p.origin) && typeof p.origin.rigProjectId === 'string' && typeof p.origin.animationId === 'string') {
       meta.origin = { rigProjectId: idMap.get(p.origin.rigProjectId) ?? p.origin.rigProjectId, animationId: p.origin.animationId };
     }
-    const payload = remapPayload ? remapPayload(p.kind, p.payload, idMap) ?? p.payload : p.payload;
-    added.push(await store.add(meta, payload, newId));
+    let payload: unknown;
+    try { payload = remapPayload ? remapPayload(p.kind, p.payload, idMap) ?? p.payload : p.payload; } catch { rejected.push({ name, reason: 'Verknüpfungen nicht lesbar' }); continue; }
+    try { added.push(await store.add(meta, payload, newId)); } catch (err) { rejected.push({ name, reason: err instanceof Error ? err.message : 'Speichern fehlgeschlagen' }); }
   }
   return { added, rejected };
 }

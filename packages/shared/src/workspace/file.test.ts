@@ -273,4 +273,24 @@ describe('Workspace-Datei: Verknüpfungen beim Laden umschreiben', () => {
     expect(pl.images!.x.source.projectId).toBe(list.find(m => m.name === 'A')!.id);
     expect(pl.images!.y.source.projectId).toBe('kaputt');
   });
+
+  it('remapPayload wirft für Projekt 2 von 3: die anderen werden übernommen, eines abgelehnt', async () => {
+    const f = { format: 'klexel-workspace', version: 1, projects: ['Eins', 'Zwei', 'Drei'].map((n, i) => ({ id: `i${i}`, kind: 'klexel', name: n, updatedAt: i, payload: { i } })) };
+    const dst = mk();
+    const r = await importWorkspace(dst, JSON.stringify(f), known, undefined, (_k, p) => { if ((p as { i: number }).i === 1) throw new TypeError('kaputt'); return p; });
+    expect(r.added.map(m => m.name)).toEqual(['Eins', 'Drei']);
+    expect(r.rejected).toEqual([{ name: 'Zwei', reason: 'Verknüpfungen nicht lesbar' }]);
+    expect(await dst.list()).toHaveLength(2);
+  });
+
+  it('Speicherfehler bei einem Projekt (z. B. vergebene ID) lehnt nur dieses ab', async () => {
+    const f = { format: 'klexel-workspace', version: 1, projects: ['Eins', 'Zwei'].map((n, i) => ({ id: `i${i}`, kind: 'klexel', name: n, updatedAt: i, payload: i })) };
+    const dst = mk();
+    const orig = dst.add.bind(dst);
+    let n = 0;
+    dst.add = (...a: Parameters<typeof orig>) => (n++ === 0 ? Promise.reject(new Error('Projekt-ID x ist schon vergeben')) : orig(...a));
+    const r = await importWorkspace(dst, JSON.stringify(f), known);
+    expect(r.rejected).toEqual([{ name: 'Eins', reason: 'Projekt-ID x ist schon vergeben' }]);
+    expect(r.added.map(m => m.name)).toEqual(['Zwei']);
+  });
 });

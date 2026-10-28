@@ -199,21 +199,27 @@ export function carryLinkedUpdate(q: Project, before: Project, after: Project): 
  * map stay as they are; the same object if nothing maps. Does not mutate `p`.
  */
 export function remapSourceIds(p: Project, idMap: ReadonlyMap<string, string>): Project {
-  let images = p.images;
-  for (const [key, img] of Object.entries(p.images)) {
-    const to = img.source ? idMap.get(img.source.projectId) : undefined;
-    if (to === undefined || to === img.source!.projectId) continue;
-    if (images === p.images) images = { ...p.images };
+  const srcImages = p.images ?? {};
+  let images = srcImages;
+  for (const [key, img] of Object.entries(srcImages)) {
+    const from = img?.source?.projectId;
+    const to = typeof from === 'string' ? idMap.get(from) : undefined;
+    if (to === undefined || to === from) continue;
+    if (images === srcImages) images = { ...srcImages };
     images[key] = { ...img, source: { ...img.source!, projectId: to } };
   }
   let linkedFrames = p.linkedFrames;
   if (linkedFrames && Object.keys(linkedFrames).some((k) => { const to = idMap.get(k); return to !== undefined && to !== k; })) {
-    const next: Record<string, number[]> = {};
+    // Map statt Objekt, damit Schlüssel wie "constructor" oder "__proto__" nichts Eigenes treffen
+    const next = new Map<string, number[]>();
     for (const [k, ids] of Object.entries(linkedFrames)) {
       const to = idMap.get(k) ?? k;
-      next[to] = next[to] ? [...new Set([...next[to], ...ids])].sort((a, b) => a - b) : [...ids];
+      const cur = next.get(to);
+      next.set(to, cur ? [...new Set([...cur, ...ids])].sort((a, b) => a - b) : [...ids]);
     }
-    linkedFrames = next;
+    linkedFrames = {};
+    for (const [k, v] of next) Object.defineProperty(linkedFrames, k, { value: v, enumerable: true, writable: true, configurable: true });
   }
-  return images === p.images && linkedFrames === p.linkedFrames ? p : { ...p, images, ...(linkedFrames ? { linkedFrames } : {}) };
+  if (images === srcImages && linkedFrames === p.linkedFrames) return p;
+  return { ...p, ...(p.images ? { images } : {}), ...(linkedFrames ? { linkedFrames } : {}) };
 }

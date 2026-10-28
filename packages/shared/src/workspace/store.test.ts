@@ -120,4 +120,27 @@ describe('WorkspaceStore', () => {
       expect(c.updatedAt).toBeGreaterThan(b.updatedAt);
     });
   });
+
+  it('add lehnt eine vorhandene ID ab und lässt das Projekt unberührt', async () => {
+    const { ws } = setup();
+    const a = await ws.create('klexel', 'A', { v: 1 });
+    await expect(ws.add({ kind: 'klexel', name: 'X', updatedAt: 1 }, { v: 2 }, a.id)).rejects.toThrow();
+    expect(await ws.load(a.id)).toEqual({ v: 1 });
+    expect((await ws.list()).map(m => m.name)).toEqual(['A']);
+    const b = await ws.add({ kind: 'klexel', name: 'B', updatedAt: 1 }, 5, 'feste-id');
+    expect(b.id).toBe('feste-id');
+    expect(await ws.load('feste-id')).toBe(5);
+  });
+
+  it('create und duplicate liegen vorn, auch wenn der Index schon höhere Zeitstempel hat', async () => {
+    const kv = new MemoryBackend();
+    kv.data.set('ws:index', [{ id: 'alt', kind: 'klexel', name: 'Alt', updatedAt: Date.now() + 100000 }]);
+    kv.data.set('ws:p:alt', 1);
+    const ws = new WorkspaceStore(kv);
+    const n = await ws.create('klexel', 'Neu', 2);
+    expect(n.updatedAt).toBeGreaterThan(Date.now() + 100000);
+    const d = await ws.duplicate('alt');
+    expect(d.updatedAt).toBeGreaterThan(n.updatedAt);
+    expect((await ws.list()).map(m => m.name)).toEqual(['Alt (Kopie)', 'Neu', 'Alt']);
+  });
 });
