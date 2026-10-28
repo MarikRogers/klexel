@@ -66,7 +66,7 @@ describe('importFile: eigenständige Rigsprite-Projektdatei', () => {
 
   it('beschädigtes Projekt: Fehlermeldung, nichts gespeichert', async () => {
     const { store, actions } = setup(true);
-    expect(await actions.importFile(file(project({ version: 'x' })))).toBe(0);
+    expect(await actions.importFile(file(project({ version: 0 })))).toBe(0);
     expect(await store.list()).toEqual([]);
     expect(toast()).toMatch(/beschädigt/);
   });
