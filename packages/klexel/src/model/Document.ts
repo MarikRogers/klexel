@@ -1,4 +1,4 @@
-import { MAX_IMAGE_SIZE } from '@suite/shared';
+import { MAX_IMAGE_SIZE, blendOver, compositeLayers, type Color } from '@suite/shared';
 
 /** Größte Bildbreite/-höhe; gemeinsam mit der Hülle festgelegt (128). */
 export const MAX_SIZE = MAX_IMAGE_SIZE;
@@ -7,7 +7,7 @@ export const MAX_FRAMES = 64;
 export const MAX_PIXELS = 16_000_000;
 export const MAX_NAME = 24;
 
-export type Color = number; // 0xRRGGBBAA
+export type { Color };
 
 export interface LayerProps {
   name: string;
@@ -30,19 +30,7 @@ export interface Layer extends LayerProps {
 
 export type DrawBlock = 'locked' | 'hidden' | null;
 
-// Source-over mit nicht-prämultipliziertem Alpha; srcOpacity 0..100
-export function blendOver(dst: Color, src: Color, srcOpacity: number): Color {
-  const sa = ((src & 255) / 255) * (srcOpacity / 100);
-  const da = (dst & 255) / 255;
-  const outA = sa + da * (1 - sa);
-  if (outA === 0) return 0;
-  const k = da * (1 - sa);
-  const r = Math.round((((src >>> 24) & 255) * sa + ((dst >>> 24) & 255) * k) / outA);
-  const g = Math.round((((src >>> 16) & 255) * sa + ((dst >>> 16) & 255) * k) / outA);
-  const b = Math.round((((src >>> 8) & 255) * sa + ((dst >>> 8) & 255) * k) / outA);
-  const out = (r * 256 + g) * 256 + b;
-  return (out * 256 + Math.round(outA * 255)) >>> 0;
-}
+export { blendOver };
 
 export interface DocumentState {
   width: number;
@@ -276,19 +264,10 @@ export class PixelDocument {
     const cached = this.caches.get(frameId);
     if (cached) return cached;
     if (this.frameIndex(frameId) < 0) throw new RangeError('Frame unbekannt');
-    const out = new Uint32Array(this.width * this.height);
-    for (const layer of this.layers) {
-      if (!layer.visible || layer.opacity === 0) continue;
-      const data = layer.cels.get(frameId);
-      if (!data) continue;
-      const opaque = layer.opacity === 100;
-      for (let i = 0; i < out.length; i++) {
-        const s = data[i];
-        if (s === 0) continue;
-        // Schnellpfad: deckendes Pixel bei 100 % ersetzt das Ergebnis, ebenso über Transparent
-        out[i] = opaque && ((s & 255) === 255 || out[i] === 0) ? s : blendOver(out[i], s, layer.opacity);
-      }
-    }
+    const out = compositeLayers(
+      this.layers.map((l) => ({ visible: l.visible, opacity: l.opacity, cel: l.cels.get(frameId) })),
+      this.width * this.height,
+    );
     this.caches.set(frameId, out);
     return out;
   }

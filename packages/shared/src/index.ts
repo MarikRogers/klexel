@@ -10,3 +10,5 @@ export type { Area, AreaHandle, AreaHost, NewProjectInit } from './area';
 export { MAX_IMAGE_SIZE } from './area';
 export type { AreaDescriptor } from './areaDescriptor';
 export { DEFAULT_AUTOSAVE_DELAY_MS } from './areaDescriptor';
+export type { Color, CompositeLayer } from './composite';
+export { blendOver, compositeLayers } from './composite';

@@ -2,3 +2,4 @@
 // '@suite/shared', damit dieser DOM-frei bleibt.
 export { showToast } from './toast';
 export { saveBlob } from './saveBlob';
+export { pixelsToDataUrl, pixelsToRgba, rgbaToDataUrl } from './pixelsToDataUrl';
