@@ -76,6 +76,14 @@ describe('rigspriteArea', () => {
     expect(host.onChange).not.toHaveBeenCalled();
   });
 
+  it('snapshot kennzeichnet Projekte mit Tiefen-Schlüsseln als Version 2 (Workspace-Datei, Rückfall in ältere Stände)', () => {
+    const p = createProject('humanoid');
+    act(() => handle!.open(p));
+    act(() => useEditor.getState().addAnimation('walk'));
+    act(() => useEditor.getState().poseBone('thigh_L', { tilt: 20 }));
+    expect(handle!.snapshot().version).toBe(2);
+  });
+
   it('jede Projekt-Änderung meldet onChange genau einmal, Ansichts-Zustand nicht', () => {
     act(() => handle!.open(createProject('humanoid')));
     act(() => useEditor.getState().setProjectName('A'));

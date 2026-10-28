@@ -22,7 +22,8 @@ export interface ProjectSettings {
 }
 
 export interface Project {
-  version: 1;
+  /** 1 in memory; 2 only in stored copies of projects with depth keys (see projectForStorage). */
+  version: 1 | 2;
   name: string;
   rigTemplateId: RigTemplateId | null;
   rig: Rig;
@@ -66,11 +67,16 @@ export function usesDepthChannels(p: Project): boolean {
 }
 
 /**
- * The file text. Projects with depth keys are written as version 2, so an older app refuses them with the
- * "unsupported version" message instead of silently dropping the keys; all others stay version 1.
+ * The project as it is stored (file, workspace): with depth keys it is marked version 2, so an older app
+ * refuses it with the "unsupported version" message instead of silently dropping the keys; all others
+ * stay as they are (the same object, version 1).
  */
+export function projectForStorage(p: Project): Project {
+  return usesDepthChannels(p) && p.version !== 2 ? { ...p, version: 2 } : p;
+}
+
 export function serializeProject(p: Project): string {
-  return JSON.stringify(usesDepthChannels(p) ? { ...p, version: 2 } : p);
+  return JSON.stringify(projectForStorage(p));
 }
 
 type Obj = Record<string, unknown>;

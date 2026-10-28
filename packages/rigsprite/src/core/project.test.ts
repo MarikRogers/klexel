@@ -9,6 +9,7 @@ import {
   projectHasContent,
   serializeProject,
   toFrameInput,
+  projectForStorage,
   usesDepthChannels,
 } from './project';
 import { makeImageAsset, makePart } from '../test/fixtures';
@@ -348,6 +349,18 @@ describe('depth data in projects', () => {
   it('usesDepthChannels sees keys of any animation and ignores flat ones', () => {
     expect(usesDepthChannels(sample())).toBe(false);
     expect(usesDepthChannels(withDepth())).toBe(true);
+  });
+
+  it('projectForStorage marks projects with depth keys as version 2 and leaves others untouched', () => {
+    const flat = sample();
+    expect(projectForStorage(flat)).toBe(flat);
+    const deep = withDepth();
+    const stored = projectForStorage(deep);
+    expect(stored.version).toBe(2);
+    expect(stored.animations).toBe(deep.animations);
+    expect(deep.version).toBe(1);
+    const back = parseProjectData(stored);
+    expect(back.ok && back.project.animations[0].tracks.thigh_L).toEqual(deep.animations[0].tracks.thigh_L);
   });
 
   it('accepts versions 1 and 2 and rejects others', () => {

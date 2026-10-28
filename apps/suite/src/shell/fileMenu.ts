@@ -45,7 +45,8 @@ export function createFileActions(deps: FileActionDeps): FileActions {
       showToast('Diese Datei ist ein Rigsprite-Projekt, aber Rigsprite ist in dieser Version nicht enthalten.', 6000);
       return 0;
     }
-    if (typeof raw.version === 'number' && raw.version > 1) {
+    // Version 2: Projekt mit Tiefen-Schlüsseln (Rigsprite, projectForStorage); neuer als 2 kennt diese App nicht.
+    if (typeof raw.version === 'number' && raw.version > 2) {
       showToast('Die Datei stammt von einer neueren Version.', 5000);
       return 0;
     }

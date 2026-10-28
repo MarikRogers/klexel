@@ -31,7 +31,7 @@ describe('importFile: eigenständige Rigsprite-Projektdatei', () => {
       store,
       prepare: async () => undefined,
       isKnownKind: k => k === 'klexel' || (withRigsprite && k === 'rigsprite'),
-      validatePayload: (k, p) => k !== 'rigsprite' || (typeof p === 'object' && p !== null && (p as { version?: number }).version === 1),
+      validatePayload: (k, p) => k !== 'rigsprite' || (typeof p === 'object' && p !== null && [1, 2].includes((p as { version?: number }).version ?? 0)),
     });
     return { store, actions };
   };
@@ -58,9 +58,15 @@ describe('importFile: eigenständige Rigsprite-Projektdatei', () => {
     expect(toast()).toBe('Diese Datei ist ein Rigsprite-Projekt, aber Rigsprite ist in dieser Version nicht enthalten.');
   });
 
+  it('Projekt mit Tiefen-Schlüsseln (Version 2) wird wie jedes andere hinzugefügt', async () => {
+    const { store, actions } = setup(true);
+    expect(await actions.importFile(file(project({ version: 2 })))).toBe(1);
+    expect((await store.list()).length).toBe(1);
+  });
+
   it('Projekt einer neueren Version: eigene Meldung, nichts gespeichert', async () => {
     const { store, actions } = setup(true);
-    expect(await actions.importFile(file(project({ version: 2 })))).toBe(0);
+    expect(await actions.importFile(file(project({ version: 3 })))).toBe(0);
     expect(await store.list()).toEqual([]);
     expect(toast()).toBe('Die Datei stammt von einer neueren Version.');
   });

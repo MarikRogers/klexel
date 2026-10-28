@@ -4,7 +4,7 @@ import './ui/app.css';
 import { createRoot } from 'react-dom/client';
 import type { Area, AreaHandle, AreaHost } from '@suite/shared';
 import { showToast } from '@suite/shared/ui';
-import type { Project } from './core/project';
+import { projectForStorage, type Project } from './core/project';
 import { shortcutsEnabled, syncLinkedSources, watchProjectChanges, type LinkedSyncSummary } from './areaLogic';
 import { AREA_MARKER } from './marker';
 import { useEditor } from './state/store';
@@ -105,7 +105,7 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
       }
       void syncSources(true);
     },
-    snapshot: () => useEditor.getState().project,
+    snapshot: () => projectForStorage(useEditor.getState().project),
     thumbnail: () => thumbnailOf(captureViewport()),
     flush() {
       // Ein offenes Ziehen abschließen, damit der Stand vollständig gesichert wird
