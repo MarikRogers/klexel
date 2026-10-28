@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Area, AreaHandle, AreaHost } from './area';
+import type { Area, AreaHandle, AreaHost } from '@suite/shared';
 import type { SavedState } from './storage/state';
 import { mountKlexel } from './klexel';
 

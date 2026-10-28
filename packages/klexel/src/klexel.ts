@@ -35,7 +35,7 @@ import { exportPng, importPng } from './storage/storage';
 import { encodeKlexel, decodeKlexel } from './storage/projectCodec';
 import { thumbnailPixels, rgbaToPngDataUrl } from './storage/thumbnail';
 import type { SavedState } from './storage/state';
-import type { AreaHost, AreaHandle } from './area';
+import type { AreaHost, AreaHandle } from '@suite/shared';
 
 type ToolName = 'select' | 'pen' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
 type ShapeTool = 'line' | 'rect' | 'ellipse';

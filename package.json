@@ -1,14 +1,19 @@
 {
-  "name": "pixelart",
+  "name": "klexel-suite",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "vite --host",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host",
-    "test": "vitest run",
-    "deploy": "node scripts/deploy.mjs"
+    "dev": "npm run dev -w @suite/app",
+    "build": "npm run build -w @suite/app",
+    "preview": "npm run preview -w @suite/app",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "deploy": "npm run deploy -w @suite/app"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

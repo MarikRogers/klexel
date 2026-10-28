@@ -1,0 +1,9 @@
+// Gemeinsame, DOM-freie Schicht der Suite: Workspace (Projekte, Speicher, Dateiformat) und Bereichs-Vertrag.
+export type { ProjectKind, ProjectMeta, KvBackend } from './workspace/types';
+export { WorkspaceStore, newProjectId } from './workspace/store';
+export { MemoryBackend } from './workspace/memoryBackend';
+export { IdbBackend } from './workspace/idbBackend';
+export { migrateLegacy } from './workspace/migrateLegacy';
+export { exportWorkspace, importWorkspace } from './workspace/file';
+export type { WorkspaceFile, ImportResult } from './workspace/file';
+export type { Area, AreaHandle, AreaHost, NewProjectInit } from './area';

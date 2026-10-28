@@ -1,0 +1,18 @@
+{
+  "name": "@suite/klexel",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mount": "./src/klexel.ts",
+    "./style.css": "./src/style.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@suite/shared": "*"
+  }
+}

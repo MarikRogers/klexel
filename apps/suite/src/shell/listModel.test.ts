@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { nextUntitledName, filterProjects, formatUpdated, parseSize, afterRemoveError } from './listModel';
-import type { ProjectMeta } from '../workspace/types';
+import type { ProjectMeta } from '@suite/shared';
 
 const meta = (name: string): ProjectMeta => ({ id: name, kind: 'klexel', name, updatedAt: 0 });
 

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { snapshotKey } from './snapshotKey';
-import { PixelDocument } from '../model/Document';
-import { encodeKlexel } from '../storage/projectCodec';
+import { PixelDocument, encodeKlexel } from '@suite/klexel';
 
 const state = () => encodeKlexel(new PixelDocument(8, 8), [0xff0000ff, 0x00ff00ff], 0xff0000ff);
 

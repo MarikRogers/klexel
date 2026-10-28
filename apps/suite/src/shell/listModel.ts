@@ -1,5 +1,5 @@
-import { MAX_SIZE } from '../model/Document';
-import type { ProjectMeta } from '../workspace/types';
+import { MAX_SIZE } from '@suite/klexel';
+import type { ProjectMeta } from '@suite/shared';
 
 /** „Unbenannt", sonst die kleinste freie Nummer („Unbenannt 2", …). */
 export function nextUntitledName(existing: string[], base = 'Unbenannt'): string {

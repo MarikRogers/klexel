@@ -1,16 +1,9 @@
 // Hülle (nur Browser): Workspace öffnen, Bestand übernehmen, Klexel einhängen, Projekte wechseln und automatisch sichern.
 import './shell.css';
-import type { AreaHandle, AreaHost, NewProjectInit } from '../area';
-import type { SavedState } from '../storage/state';
-import { PixelDocument } from '../model/Document';
-import { PICO8 } from '../palette/palettes';
-import { encodeKlexel, decodeKlexel } from '../storage/projectCodec';
-import { readLegacyState } from '../storage/storage';
-import { WorkspaceStore } from '../workspace/store';
-import { IdbBackend } from '../workspace/idbBackend';
-import { migrateLegacy } from '../workspace/migrateLegacy';
-import type { ProjectMeta } from '../workspace/types';
-import { showToast } from '../ui/toast';
+import type { AreaHandle, AreaHost, NewProjectInit, ProjectMeta } from '@suite/shared';
+import { WorkspaceStore, IdbBackend, migrateLegacy } from '@suite/shared';
+import type { SavedState } from '@suite/klexel';
+import { PixelDocument, PICO8, encodeKlexel, decodeKlexel, readLegacyState, showToast } from '@suite/klexel';
 import { createAutosave } from './autosave';
 import { nextUntitledName, afterRemoveError } from './listModel';
 import { snapshotKey } from './snapshotKey';
@@ -105,7 +98,7 @@ export async function startShell(app: HTMLElement): Promise<Shell> {
     isActive: () => !switching,
   };
 
-  const { mountKlexel } = await import('../klexel');
+  const { mountKlexel } = await import('@suite/klexel/mount');
   handle = mountKlexel(app, host);
 
   /** Öffnet einen geladenen Stand; ohne Vorschau wird beim nächsten Sichern einmal geschrieben (erzeugt sie). */

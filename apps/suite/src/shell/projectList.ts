@@ -1,4 +1,4 @@
-import type { ProjectMeta } from '../workspace/types';
+import type { ProjectMeta } from '@suite/shared';
 import { filterProjects, formatUpdated, parseSize } from './listModel';
 
 export interface ProjectListDeps {

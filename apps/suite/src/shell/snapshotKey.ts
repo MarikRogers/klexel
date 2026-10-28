@@ -1,4 +1,4 @@
-import type { SavedState } from '../storage/state';
+import type { SavedState } from '@suite/klexel';
 
 // Zwei unabhängige 32-Bit-Hashes (FNV-1a und ein multiplikativer) über alle Werte; zusammen 64 Bit
 function mix(h: [number, number], v: number): void {
