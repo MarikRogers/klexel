@@ -10,6 +10,9 @@ interface P { kind: ProjectKind; v: number }
 interface Fake {
   d: AreaDescriptor<P>;
   host?: AreaHost;
+  /** #-Teil der Adresse beim Einhängen (ein Bereich liest einen Link beim Einhängen selbst) */
+  hashAtMount?: string;
+  followLink: ReturnType<typeof vi.fn<(hash: string) => void>>;
   /** Inhalt im „Editor" */
   content?: P;
   failLoad: boolean;
@@ -17,12 +20,14 @@ interface Fake {
 }
 
 function fake(kind: ProjectKind, autosaveDelayMs?: number): Fake {
-  const f: Fake = { failLoad: false, opened: [] } as unknown as Fake;
+  const f: Fake = { failLoad: false, opened: [], followLink: vi.fn() } as unknown as Fake;
   const area: Area<P> = {
     kind, title: kind,
     mount(_root, host) {
       f.host = host;
+      f.hashAtMount = location.hash;
       return {
+        followLink: () => f.followLink(location.hash),
         open: p => { f.content = { ...p }; f.opened.push(p); },
         snapshot: () => ({ ...f.content! }),
         thumbnail: () => `data:${kind}`,
@@ -419,5 +424,113 @@ describe('startShell: Rückgabe an Klexel (host.returnToKlexel)', () => {
     expect(K.opened).toEqual([{ kind: 'klexel', v: 2 }]);
     expect(container('klexel').hidden).toBe(false);
     expect(await store.lastOpened()).toBe(projectId);
+  });
+});
+
+describe('startShell: geteilter Link in der Adresse (handlesHash)', () => {
+  // Fake-„Klexel" erkennt #i=… wie der echte Bereich (Prüfung nur des Präfixes)
+  const withLinks = () => { K.d.handlesHash = h => /^#?i=/.test(h); };
+  const setHash = (h: string) => history.replaceState(null, '', h ? `#${h}` : location.pathname);
+  const changeHash = async (h: string) => {
+    setHash(h);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await tick(20);
+  };
+  afterEach(() => setHash(''));
+
+  it('Start mit Link, zuletzt offen war Rigsprite: Klexel wird statt Rigsprite eingehängt und sieht den Link', async () => {
+    withLinks();
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(r.id);
+    setHash('i=abc');
+    await startShell(app, descriptors(), { backend: kv });
+    expect(K.opened).toEqual([{ kind: 'klexel', v: 1 }]);
+    expect(K.hashAtMount).toBe('#i=abc');
+    expect(R.d.load).not.toHaveBeenCalled();
+    expect(container('klexel').hidden).toBe(false);
+    expect(await store.lastOpened()).toBe(k.id);
+    expect(location.hash).toBe('#i=abc'); // die Hülle lässt den Link stehen
+    expect(K.followLink).not.toHaveBeenCalled(); // frisch eingehängt: liest selbst
+  });
+
+  it('Start mit Link ohne Klexel-Projekt: legt ein leeres Klexel-Projekt an, Rigsprite wird nicht geladen', async () => {
+    withLinks();
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(r.id);
+    setHash('i=abc');
+    await startShell(app, descriptors(), { backend: kv });
+    expect(K.opened).toEqual([{ kind: 'klexel', v: 0 }]);
+    expect(K.hashAtMount).toBe('#i=abc');
+    expect(R.d.load).not.toHaveBeenCalled();
+    expect((await store.list()).map(m => m.kind).sort()).toEqual(['klexel', 'rigsprite']);
+  });
+
+  it('Link bei sichtbarem Rigsprite, Klexel noch nie eingehängt: sichert, wechselt und hängt Klexel mit dem Link ein', async () => {
+    withLinks();
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv });
+    R.content = { kind: 'rigsprite', v: 7 }; // ungesichert
+    await changeHash('i=xyz');
+    expect(await store.load(r.id)).toEqual({ kind: 'rigsprite', v: 7 });
+    expect(K.opened).toEqual([{ kind: 'klexel', v: 1 }]);
+    expect(K.hashAtMount).toBe('#i=xyz');
+    expect(K.followLink).not.toHaveBeenCalled();
+    expect(container('klexel').hidden).toBe(false);
+    expect(container('rigsprite').hidden).toBe(true);
+    expect(K.host!.isActive()).toBe(true);
+    expect(await store.lastOpened()).toBe(k.id);
+  });
+
+  it('Link bei sichtbarem Rigsprite, Klexel schon eingehängt (verdeckt): wechselt und ruft followLink einmal', async () => {
+    withLinks();
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    await shell.switchArea('rigsprite');
+    expect(container('klexel').hidden).toBe(true);
+    await changeHash('i=xyz');
+    expect(container('klexel').hidden).toBe(false);
+    expect(K.followLink).toHaveBeenCalledTimes(1);
+    expect(K.followLink).toHaveBeenCalledWith('#i=xyz');
+    expect(K.host!.isActive()).toBe(true); // erst nach dem Wechsel gerufen: bedienbar
+  });
+
+  it('Link bei sichtbarem Klexel: die Hülle tut nichts (Klexel behandelt seinen hashchange selbst)', async () => {
+    withLinks();
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.setLastOpened(k.id);
+    await startShell(app, descriptors(), { backend: kv });
+    await changeHash('i=xyz');
+    expect(K.followLink).not.toHaveBeenCalled();
+    expect(K.opened).toHaveLength(1);
+    expect(await store.list()).toHaveLength(1);
+  });
+
+  it('anderer #-Teil: kein Wechsel', async () => {
+    withLinks();
+    await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(r.id);
+    setHash('irgendwas');
+    await startShell(app, descriptors(), { backend: kv });
+    expect(K.d.load).not.toHaveBeenCalled();
+    await changeHash('x=1');
+    expect(K.d.load).not.toHaveBeenCalled();
+    expect(container('rigsprite').hidden).toBe(false);
+    expect(await store.lastOpened()).toBe(r.id);
+  });
+
+  it('Build ohne Klexel: ein Link wird still ignoriert', async () => {
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 2 });
+    await store.setLastOpened(r.id);
+    setHash('i=abc');
+    await startShell(app, [R.d] as unknown as AreaDescriptor<unknown>[], { backend: kv });
+    await changeHash('i=def');
+    expect(R.opened).toEqual([{ kind: 'rigsprite', v: 2 }]);
+    expect(await store.list()).toHaveLength(1);
   });
 });

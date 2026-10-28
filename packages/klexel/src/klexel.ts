@@ -635,14 +635,20 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
     onApply: image => host.requestNewProject({ width: image.width, height: image.height, image }),
     onClose: clearHash,
   });
+  // Höchstens ein Lesevorgang zugleich und kein zweiter Dialog: Einhängen, eigener hashchange und followLink der
+  // Hülle dürfen sich überschneiden
+  let linkReading = false;
   async function openLinkFromHash(): Promise<void> {
-    const r = await readShareLink(location.hash);
+    if (linkReading || $('linkDlg')?.hasAttribute('open')) return;
+    linkReading = true;
+    let r: Awaited<ReturnType<typeof readShareLink>>;
+    try { r = await readShareLink(location.hash); } finally { linkReading = false; }
     if (!r) return;
     if (r.ok) { settleSelection(); linkDlg.open(r.image, r.colors); return; }
     showToast(LINK_ERRORS[r.error], 4000);
     clearHash();
   }
-  listen(window, 'hashchange', () => { if (!$('linkDlg')?.hasAttribute('open')) void openLinkFromHash(); });
+  listen(window, 'hashchange', () => { void openLinkFromHash(); });
   void openLinkFromHash();
 
   return {
@@ -663,6 +669,8 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
       }
     },
     flush: flushSave,
+    // Die Hülle hat wegen eines Links zu Klexel gewechselt, während Klexel verdeckt war (hashchange verpasst)
+    followLink: () => { void openLinkFromHash(); },
     setActive(on) {
       active = on;
       if (on && resizedWhileInactive) { resizedWhileInactive = false; view.fit(); refresh(); }

@@ -272,33 +272,38 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
    * Erstes Projekt öffnen: das zuletzt geöffnete bzw. nächste lesbare (Unlesbares wird übersprungen); nur dessen
    * Bereich wird geladen. Lässt sich ein Bereich nicht laden (z. B. Chunk offline nicht abrufbar), werden Projekte
    * anderer Arten versucht, zuletzt ein leeres Projekt eines ladbaren Bereichs. Wirft nie: die Hülle bleibt bedienbar.
+   * prefer = Bereich eines Links in der Adresse (handlesHash): zuerst dessen Projekte, sonst ein leeres davon, erst
+   * danach andere Arten (ein frisch eingehängter Bereich liest den Link beim Einhängen selbst).
    */
-  async function openAtStart(): Promise<void> {
+  async function openAtStart(prefer?: AreaDescriptor<unknown>): Promise<void> {
     const failed = new Set<string>();
-    for (const m of order) {
-      if (failed.has(m.kind)) continue;
-      let payload: unknown;
-      try { payload = byKind(m.kind)!.decode(await store.load(m.id)); } catch (err) {
-        console.error(`Projekt ${m.id} konnte nicht gelesen werden`, err);
-        continue;
+    /** Öffnet das erste lesbare Projekt der Liste (Arten mit nicht ladbarem Bereich übersprungen). */
+    async function openFirstOf(candidates: ProjectMeta[]): Promise<boolean> {
+      for (const m of candidates) {
+        if (failed.has(m.kind)) continue;
+        let payload: unknown;
+        try { payload = byKind(m.kind)!.decode(await store.load(m.id)); } catch (err) {
+          console.error(`Projekt ${m.id} konnte nicht gelesen werden`, err);
+          continue;
+        }
+        if (payload === null) { console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`); continue; }
+        try {
+          await show(m.id, m.kind, payload, !!m.thumbnail);
+          void store.setLastOpened(m.id).catch(err => console.error(err));
+          return true;
+        } catch (err) {
+          console.error(`Bereich ${m.kind} konnte nicht geladen werden`, err);
+          failed.add(m.kind);
+        }
       }
-      if (payload === null) { console.error(`Projekt ${m.id} ist nicht lesbar und wird übersprungen`); continue; }
-      try {
-        await show(m.id, m.kind, payload, !!m.thumbnail);
-        void store.setLastOpened(m.id).catch(err => console.error(err));
-        return;
-      } catch (err) {
-        console.error(`Bereich ${m.kind} konnte nicht geladen werden`, err);
-        failed.add(m.kind);
-      }
+      return false;
     }
-    // Kein öffenbares Projekt: ein leeres der ersten ladbaren Art (Reihenfolge der Bereiche)
-    for (const d of descriptors) {
-      if (failed.has(d.kind)) continue;
+    /** Leeres Projekt der Art anlegen und öffnen; false nur, wenn der Bereich nicht ladbar ist. */
+    async function openBlank(d: AreaDescriptor<unknown>): Promise<boolean> {
       try { await ensureMounted(d.kind); } catch (err) {
         console.error(`Bereich ${d.kind} konnte nicht geladen werden`, err);
         failed.add(d.kind);
-        continue;
+        return false;
       }
       try {
         if (!storeOk) throw new Error('Workspace nicht lesbar');
@@ -312,12 +317,25 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
         currentKind = d.kind;
         reveal(d.kind);
       }
-      return;
+      return true;
+    }
+    if (prefer) {
+      if (await openFirstOf(order.filter(m => m.kind === prefer.kind))) return;
+      if (!failed.has(prefer.kind) && await openBlank(prefer)) return;
+    }
+    if (await openFirstOf(order.filter(m => m.kind !== prefer?.kind))) return;
+    // Kein öffenbares Projekt: ein leeres der ersten ladbaren Art (Reihenfolge der Bereiche)
+    for (const d of descriptors) {
+      if (failed.has(d.kind)) continue;
+      if (await openBlank(d)) return;
     }
     showToast('Kein Bereich konnte geladen werden', 6000);
   }
 
-  await openAtStart();
+  /** Bereich, zu dem der #-Teil der Adresse gehört (geteilter Link), sonst undefined. */
+  const linkArea = (hash: string) => (hash ? descriptors.find(d => d.handlesHash?.(hash)) : undefined);
+
+  await openAtStart(linkArea(location.hash));
   currentHandle()?.setActive(true);
 
   // Eine Warteschlange für alles, was das offene Projekt austauscht oder löscht
@@ -426,6 +444,29 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     }
     await newProjectQueued(kind, BLANK);
   }
+
+  /**
+   * Link in der Adresse (hashchange): zum Bereich des Links wechseln wie der Umschalter (eingereiht, vorher sichern),
+   * dann behandelt der Bereich den Link. Ein frisch eingehängter Bereich liest ihn beim Einhängen; ein schon
+   * eingehängter war verdeckt und hat den hashchange verpasst → followLink() nach dem Wechsel. Ist der Bereich schon
+   * sichtbar und bedienbar, behandelt er den Link selbst (eigener hashchange). Andere #-Teile: nichts.
+   */
+  async function followHash(): Promise<void> {
+    const d = linkArea(location.hash);
+    if (!d || (!switching && currentKind === d.kind)) return;
+    let mountedBefore = false;
+    try {
+      await enqueue(async () => {
+        mountedBefore = slot(d.kind).handle !== undefined;
+        await switchAreaQueued(d.kind);
+      });
+    } catch (err) {
+      console.error('Wechsel zum Link fehlgeschlagen', err);
+      return;
+    }
+    if (mountedBefore && currentKind === d.kind && d.handlesHash!(location.hash)) slot(d.kind).handle?.followLink?.();
+  }
+  window.addEventListener('hashchange', () => { void followHash(); });
 
   function removeProject(id: string): Promise<void> {
     return enqueue(async () => {

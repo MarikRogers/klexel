@@ -1,4 +1,5 @@
 import { encodeImage, decodeBody, toBase64Url, fromBase64Url, MAX_SIDE, MAX_COLORS, type DecodedImage } from './linkCodec';
+import { shareLinkValue } from './linkHash';
 
 export const LINK_OK_MAX = 2000;
 export const LINK_WARN_MAX = 4000;
@@ -66,7 +67,7 @@ export async function createShareLink(img: DecodedImage, base: string): Promise<
 
 /** Liest den `#`-Teil der Adresse. `null`, wenn er keinen Klexel-Link (`i=`) enthält. */
 export async function readShareLink(hash: string): Promise<OpenResult | null> {
-  const value = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get('i');
+  const value = shareLinkValue(hash);
   if (value === null) return null;
   if (value.length > MAX_VALUE_LENGTH) return { ok: false, error: 'corrupt' };
   const bytes = fromBase64Url(value);

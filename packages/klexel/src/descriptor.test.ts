@@ -14,6 +14,17 @@ describe('klexelDescriptor', () => {
     expect(MAX_SIZE).toBe(MAX_IMAGE_SIZE);
   });
 
+  it('handlesHash erkennt geteilte Links (#i=…), auch unvollständige, sonst nichts', async () => {
+    const { createShareLink } = await import('./share/link');
+    const link = await createShareLink({ width: 1, height: 1, pixels: Uint32Array.of(0xff0000ff) }, 'https://x.test/app/');
+    expect(link.ok).toBe(true);
+    if (!link.ok) return;
+    expect(d.handlesHash!(new URL(link.url).hash)).toBe(true);
+    expect(d.handlesHash!('#i=kaputt')).toBe(true); // Klexel meldet dann „beschädigt"
+    expect(d.handlesHash!('i=abc')).toBe(true);
+    for (const h of ['', '#', '#x=1', '#impressum', '#ix=1']) expect(d.handlesHash!(h)).toBe(false);
+  });
+
   it('blank: lesbarer Inhalt in der gewünschten Größe mit den Bildpixeln', () => {
     const pixels = new Uint32Array(4 * 3).fill(0x112233ff);
     pixels[0] = 0xff0000ff;

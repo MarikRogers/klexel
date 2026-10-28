@@ -8,6 +8,7 @@ import { readLegacyState } from './storage/storage';
 import { changeKey } from './storage/changeKey';
 import type { SavedState } from './storage/state';
 import { AREA_MARKER } from './marker';
+import { isShareLinkHash } from './share/linkHash';
 
 const DEFAULT_INIT: NewProjectInit = { width: 32, height: 32 };
 
@@ -36,6 +37,8 @@ export const klexelDescriptor: AreaDescriptor<SavedState> & { marker: string } =
   newProjectSize: true,
   framesOf: payload => framesOfKlexel(payload),
   fromFrames: input => klexelFromFrames(input),
+  // Geteilter Link (#i=…): die Hülle wechselt zu Klexel, Klexel öffnet den Link-Dialog
+  handlesHash: isShareLinkHash,
 };
 
 /** Gültige Bildrate von Klexel (Regler und Prüfung beim Laden). */
