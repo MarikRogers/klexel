@@ -422,7 +422,19 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
     return false;
   }
 
+  // Mittlere Maustaste: Zeichenfläche ziehen (unabhängig vom Werkzeug; zeichnet nie)
+  let midPan: { id: number; x: number; y: number } | null = null;
+  canvas.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); }); // kein Autoscroll
   canvas.addEventListener('pointerdown', e => {
+    if (e.button === 1 && e.pointerType === 'mouse') {
+      e.preventDefault();
+      if (!midPan) {
+        canvas.setPointerCapture(e.pointerId);
+        const [mx, my] = local(e);
+        midPan = { id: e.pointerId, x: mx, y: my };
+      }
+      return;
+    }
     canvas.setPointerCapture(e.pointerId);
     const [cx, cy] = local(e);
     pointers.set(e.pointerId, { x: cx, y: cy });
@@ -456,6 +468,12 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
   });
 
   canvas.addEventListener('pointermove', e => {
+    if (midPan && midPan.id === e.pointerId) {
+      const [mx, my] = local(e);
+      view.panX += mx - midPan.x; view.panY += my - midPan.y;
+      midPan.x = mx; midPan.y = my;
+      refresh(); return;
+    }
     const p = pointers.get(e.pointerId); if (!p) return;
     const [cx, cy] = local(e);
     p.x = cx; p.y = cy;
@@ -479,6 +497,7 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
   });
 
   function release(e: PointerEvent): void {
+    if (midPan && midPan.id === e.pointerId) { midPan = null; return; }
     if (!pointers.delete(e.pointerId)) return;
     if (pointers.size < 2) gesture = null;
     if (precisionActive()) { const [cx, cy] = local(e); precision.up(cx, cy, e.timeStamp); return; }
