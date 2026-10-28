@@ -24,3 +24,13 @@ Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v7`, sonst
 eigenen Cache und löscht beim Aktivieren alle anderen `pixelart-*`-Caches (fremde Caches bleiben).
 
 **Stand:** Klexel und Rigsprite sind beide als Bereiche eingebunden; der Standard-Build enthält beide, ein Build nur mit `klexel` oder nur mit `rigsprite` funktioniert ebenso. Alte Rigsprite-Daten kommen einmalig über „Speichern" (`*.rigsprite.json`) im alten Rigsprite und „Datei laden…" in der Suite hinein.
+
+## Austausch Klexel ↔ Rigsprite
+
+1. In Klexel die Frames benennen wie die Knochen des Rigs (z. B. `head`, `torso`); gleiche Namen werden in Rigsprite automatisch zugeordnet.
+2. In Rigsprite „Aus Klexel…" wählen: die Frames des Klexel-Projekts erscheinen als verknüpfte Bilder. Bei späteren Änderungen in Klexel aktualisiert „Aktualisieren" die Bilder.
+3. Animation bauen, dann „Nach Klexel…": die Animation wird als neues Klexel-Dokument angelegt, ein Frame je Animationsbild.
+
+Grenzen: höchstens 128×128 Pixel und 64 Frames. Die Rückgabe ist eine unabhängige Kopie (spätere Änderungen an der Animation ändern das Dokument nicht). Fehlt das verknüpfte Klexel-Projekt (gelöscht oder nicht in der Datei), zeigt Rigsprite „Quelle fehlt"; die letzten Pixel bleiben erhalten.
+
+Workspace-Datei: Beim Laden einer ganzen Workspace-Datei bekommen alle Projekte neue IDs; Verknüpfungen zwischen Projekten derselben Datei werden mitumgeschrieben, Verknüpfungen auf nicht enthaltene Projekte bleiben und zeigen „Quelle fehlt". Eine Einzelprojekt-Datei behält ihre Verknüpfungen unverändert (sie greifen, wenn sie in denselben Workspace zurückkommt).
