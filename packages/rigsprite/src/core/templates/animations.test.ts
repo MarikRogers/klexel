@@ -168,9 +168,9 @@ describe('front and back view animation templates', () => {
   const hipShiftAtLift = (id: string, rootName: string, stanceBone: string, lifted: string) => {
     const rig = rigOf(id.split('-').slice(0, 2).join('-'));
     const t = tpl(id);
-    // find the frame where the lifted leg is shortest
-    const track = t.tracks[lifted].scaleX!;
-    const k = track.reduce((a, b) => (b.value < a.value ? b : a));
+    // find the frame where the lifted leg is tilted furthest (shortest on screen)
+    const track = t.tracks[lifted].tilt!;
+    const k = track.reduce((a, b) => (Math.abs(b.value) > Math.abs(a.value) ? b : a));
     const shift = sampleChannel(t.tracks[rootName].x!, k.frame, 0);
     const stanceX = boneOrigin(computeWorldTransforms(rig)[stanceBone]).x;
     return { shift, stanceX };
@@ -194,22 +194,58 @@ describe('front and back view animation templates', () => {
   it.each(['quadruped-front-walk', 'quadruped-back-walk'])('%s lifts diagonal pairs and shifts to the stance side', (id) => {
     const t = tpl(id);
     for (const f of [0, 2, 4, 6, 10]) {
-      expect(sampleChannel(t.tracks.frontUpper_L.scaleX!, f, 1)).toBeCloseTo(sampleChannel(t.tracks.backUpper_R.scaleX!, f, 1), 6);
-      expect(sampleChannel(t.tracks.frontUpper_R.scaleX!, f, 1)).toBeCloseTo(sampleChannel(t.tracks.backUpper_L.scaleX!, f, 1), 6);
+      expect(sampleChannel(t.tracks.frontUpper_L.tilt!, f, 0)).toBeCloseTo(sampleChannel(t.tracks.backUpper_R.tilt!, f, 0), 6);
+      expect(sampleChannel(t.tracks.frontUpper_R.tilt!, f, 0)).toBeCloseTo(sampleChannel(t.tracks.backUpper_L.tilt!, f, 0), 6);
     }
     const { shift, stanceX } = hipShiftAtLift(id, 'body', 'frontUpper_R', 'frontUpper_L');
     expect(Math.sign(shift)).toBe(Math.sign(stanceX));
   });
 
-  it.each(['humanoid-front-walk', 'humanoid-back-walk'])('%s lifts legs alternately by foreshortening', (id) => {
+  it.each(['humanoid-front-walk', 'humanoid-back-walk'])('%s lifts legs alternately by tilting them in depth', (id) => {
     const t = tpl(id);
-    const l = (f: number) => sampleChannel(t.tracks.thigh_L.scaleX!, f, 1);
-    const r = (f: number) => sampleChannel(t.tracks.thigh_R.scaleX!, f, 1);
-    expect(l(4)).toBeLessThan(0.95);
-    expect(r(4)).toBeCloseTo(1, 6);
-    expect(r(12)).toBeLessThan(0.95);
-    expect(l(12)).toBeCloseTo(1, 6);
+    const side = id.includes('front') ? 1 : -1;
+    const l = (f: number) => side * sampleChannel(t.tracks.thigh_L.tilt!, f, 0);
+    const r = (f: number) => side * sampleChannel(t.tracks.thigh_R.tilt!, f, 0);
+    // foreshortened by more than 5 % on screen, towards the viewer in the front view, away in the back view
+    expect(Math.cos((l(4) * Math.PI) / 180)).toBeLessThan(0.95);
+    expect(l(4)).toBeGreaterThan(0);
+    expect(r(4)).toBeCloseTo(0, 6);
+    expect(r(12)).toBeGreaterThan(0);
+    expect(l(12)).toBeCloseTo(0, 6);
   });
+
+  it.each(['humanoid-walk', 'humanoid-run', 'humanoid-jump', 'quadruped-walk', 'humanoid-front-idle', 'humanoid-front-punch'])(
+    'flat templates (%s) carry no depth channels',
+    (id) => {
+      for (const track of Object.values(tpl(id).tracks)) {
+        for (const c of ['tilt', 'turn', 'depth'] as const) expect(track[c], `${id}.${c}`).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(['walk', 'run', 'jump'])('humanoid back-%s tilts mirror the front view (sign flipped)', (name) => {
+    const front = tpl(`humanoid-front-${name}`);
+    const back = tpl(`humanoid-back-${name}`);
+    for (const bone of ['thigh_L', 'thigh_R']) {
+      const f = front.tracks[bone].tilt!;
+      const b = back.tracks[bone].tilt!;
+      expect(f.length).toBeGreaterThan(0);
+      f.forEach((k, i) => expect(b[i].value).toBeCloseTo(-k.value, 6));
+    }
+  });
+
+  it.each(['humanoid-front-walk', 'humanoid-front-run', 'quadruped-front-walk', 'humanoid-front-jump'])(
+    '%s no longer fakes the depth with a scale on the legs',
+    (id) => {
+      const t = tpl(id);
+      const legs = Object.keys(t.tracks).filter((n) => /^(thigh|frontUpper|backUpper)_/.test(n));
+      expect(legs.length).toBeGreaterThan(0);
+      for (const n of legs) {
+        expect(t.tracks[n].tilt, `${id}:${n}`).toBeDefined();
+        expect(t.tracks[n].scaleX, `${id}:${n}`).toBeUndefined();
+      }
+    },
+  );
 
   it('front punch: the right arm comes toward the viewer (scaled up uniformly at the strike)', () => {
     const t = tpl('humanoid-front-punch');

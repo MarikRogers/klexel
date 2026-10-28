@@ -1,6 +1,6 @@
 import { newId } from '../id';
 import type { Animation, BoneTrack, Channel, Easing, Keyframe } from '../animation';
-import { TAU } from '../math';
+import { RAD2DEG, TAU } from '../math';
 import { rigHeight, type Rig, type RigTemplateId } from '../rig';
 import { outward, RIG_TEMPLATES, type ViewSide } from './rigs';
 
@@ -202,6 +202,13 @@ type View = { prefix: RigTemplateId; side: ViewSide };
 /** Positive half-wave: the lift of the left leg (phase 0..0.5) or, half a cycle later, the right leg. */
 const liftOf = (s: Side) => (p: number) => Math.max(0, Math.sin(TAU * p + (s === 'L' ? 0 : Math.PI)));
 
+/**
+ * Tilt in degrees that foreshortens a bone to `scale` of its length on screen. Positive = the tip comes
+ * toward the viewer (front view); `side` (+1 front, -1 back) flips it, since what moves forward in the
+ * character's own space moves toward the viewer from the front and away from the back.
+ */
+const tiltOf = (side: ViewSide, scale: number) => round(side * Math.acos(Math.min(1, Math.max(0, scale))) * RAD2DEG);
+
 /** Screen x (or clockwise lean of an up-pointing bone) toward the character's side `s` by `v`. */
 const toward = (side: ViewSide, s: Side, v: number) => (s === 'L' ? side : -side) * v;
 
@@ -226,12 +233,14 @@ function frontalLocomotion(
     const lift = liftOf(s);
     // the opposite arm swings forward while this leg lifts; the own arm swings back (foreshortened less)
     const forward = liftOf(s === 'L' ? 'R' : 'L');
+    // the lifted leg swings toward the viewer (front) and is foreshortened by the tilt
     tracks[`thigh_${s}`] = {
-      scaleX: c((p) => 1 - o.lift * lift(p)),
+      tilt: c((p) => tiltOf(side, 1 - o.lift * lift(p))),
       rotation: c((p) => -outward(side, s, o.turn * lift(p))),
     };
     tracks[`upperArm_${s}`] = {
-      scaleX: c((p) => 1 - o.arm * forward(p) - 0.5 * o.arm * lift(p)),
+      // forward swing: toward the viewer; backswing (the own leg lifts): away from the viewer
+      tilt: c((p) => tiltOf(side, 1 - o.arm) * (forward(p) - lift(p))),
       rotation: c((p) => -outward(side, s, o.armTurn * forward(p))),
     };
     const elbow = o.elbow;
@@ -306,9 +315,9 @@ function humanoidViewSet({ prefix, side }: View): AnimationTemplate[] {
       tracks: {
         hip: { y: keys([[0, 0], [3, 10], [6, -4], [9, -22], [12, 8], [15, 0]]) },
         torso: { scaleX: keys([[0, 1], [3, 0.95], [6, 1], [9, 1], [12, 0.96], [15, 1]]) },
-        // knees come toward the viewer (foreshortened legs) and spread a little
+        // knees come toward the viewer (tilted, foreshortened legs) and spread a little
         ...bothSides('thigh', (s) => ({
-          scaleX: keys([[0, 1], [3, 0.8], [6, 1], [9, 0.85], [12, 0.84], [15, 1]]),
+          tilt: keys([[0, 0], [3, tiltOf(side, 0.8)], [6, 0], [9, tiltOf(side, 0.85)], [12, tiltOf(side, 0.84)], [15, 0]]),
           rotation: keys([[0, 0], [3, out(s, 6)], [6, 0], [9, out(s, 4)], [12, out(s, 5)], [15, 0]]),
         })),
         ...bothSides('upperArm', (s) => ({
@@ -353,7 +362,7 @@ function quadrupedViewSet({ prefix, side }: View): AnimationTemplate[] {
   // Diagonal pairs lift together: frontL + backR (phase 0..0.5), frontR + backL (phase 0.5..1).
   // `phase` names the front leg of the pair; `s` is the side of the bone itself (for the outward turn).
   const leg = (phase: Side, s: Side) => ({
-    scaleX: c((p) => 1 - 0.15 * liftOf(phase)(p)),
+    tilt: c((p) => tiltOf(side, 1 - 0.15 * liftOf(phase)(p))),
     rotation: c((p) => -outward(side, s, 2 * liftOf(phase)(p))),
   });
   return [

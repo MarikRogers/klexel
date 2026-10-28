@@ -165,7 +165,11 @@ describe('buildFrame with depth', () => {
   };
 
   it('without depth values every template animation gives the plain 2D skinning, bit for bit', () => {
-    for (const t of ANIMATION_TEMPLATES) {
+    const flat = ANIMATION_TEMPLATES.filter((t) =>
+      Object.values(t.tracks).every((track) => !track.tilt && !track.turn && !track.depth),
+    );
+    expect(flat.length).toBeGreaterThan(10);
+    for (const t of flat) {
       const tr = RIG_TEMPLATES.find((r) => r.id === t.rigTemplateId)!.rig;
       const parts = tr.bones.map((b) =>
         fixturePart({ id: b.id, imageId: 'img', boneId: b.id, ...autoFitPart(image, b) }),
@@ -182,6 +186,24 @@ describe('buildFrame with depth', () => {
           expect(item.depth ?? 0).toBe(0);
         });
       }
+    }
+  });
+
+  it('every depth template animation stays finite and moves parts in depth', () => {
+    const deep = ANIMATION_TEMPLATES.filter((t) => Object.values(t.tracks).some((track) => track.tilt));
+    expect(deep.length).toBeGreaterThan(5);
+    for (const t of deep) {
+      const tr = RIG_TEMPLATES.find((r) => r.id === t.rigTemplateId)!.rig;
+      const parts = tr.bones.map((b) => fixturePart({ id: b.id, imageId: 'img', boneId: b.id, ...autoFitPart(image, b) }));
+      const animation = applyAnimationTemplate(t, tr);
+      let maxDepth = 0;
+      for (let f = 0; f <= t.length; f++) {
+        for (const item of buildFrame({ rig: tr, parts, images: { img: image }, animation }, f).items) {
+          for (const v of item.positions) expect(Number.isFinite(v), `${t.id}@${f}`).toBe(true);
+          maxDepth = Math.max(maxDepth, Math.abs(item.depth ?? 0));
+        }
+      }
+      expect(maxDepth, t.id).toBeGreaterThan(1);
     }
   });
 
