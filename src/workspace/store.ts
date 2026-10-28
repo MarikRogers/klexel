@@ -18,10 +18,10 @@ export class WorkspaceStore {
     return Array.isArray(v) ? (v as ProjectMeta[]) : [];
   }
 
-  private updateIndex<T>(fn: (idx: ProjectMeta[]) => T): Promise<T> {
+  private updateIndex<T>(fn: (idx: ProjectMeta[]) => T | Promise<T>): Promise<T> {
     const run = this.chain.then(async () => {
       const idx = await this.readIndex();
-      const res = fn(idx);
+      const res = await fn(idx);
       await this.kv.set(INDEX, idx);
       return res;
     });
@@ -47,11 +47,13 @@ export class WorkspaceStore {
     return v === undefined ? null : v;
   }
 
+  /** Schreibt nur für bekannte Projekte; eine unbekannte oder inzwischen gelöschte ID ist ein No-op (kein verwaister Payload). */
   async save(id: string, payload: unknown, patch?: Partial<Pick<ProjectMeta, 'name' | 'thumbnail'>>): Promise<void> {
-    await this.kv.set(pKey(id), payload);
-    await this.updateIndex(idx => {
+    // Prüfen und Schreiben im selben eingereihten Schritt, damit ein remove dazwischen nicht möglich ist
+    await this.updateIndex(async idx => {
       const m = idx.find(x => x.id === id);
       if (!m) return;
+      await this.kv.set(pKey(id), payload);
       if (patch?.name !== undefined) m.name = patch.name;
       if (patch?.thumbnail !== undefined) m.thumbnail = patch.thumbnail;
       // Streng wachsend, damit die Sortierung auch bei gleicher Millisekunde stimmt
@@ -81,6 +83,7 @@ export class WorkspaceStore {
       const i = idx.findIndex(x => x.id === id);
       if (i >= 0) idx.splice(i, 1);
     });
+    // Erst aus dem Index, dann den Payload löschen; ein danach eingereihtes save ist ein No-op
     await this.kv.del(pKey(id));
     if ((await this.lastOpened()) === id) await this.setLastOpened(null);
   }

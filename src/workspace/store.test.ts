@@ -79,6 +79,17 @@ describe('WorkspaceStore', () => {
     expect(await ws.load(b.id)).toBe(20);
   });
 
+  it('save auf unbekannte oder gelöschte ID schreibt nichts', async () => {
+    const { kv, ws } = setup();
+    await ws.save('nix', { x: 1 });
+    expect(kv.data.has('ws:p:nix')).toBe(false);
+    const a = await ws.create('klexel', 'A', 1);
+    // Löschen und ein danach eingereihtes Speichern: kein verwaister Payload
+    await Promise.all([ws.remove(a.id), ws.save(a.id, 2)]);
+    expect(kv.data.has(`ws:p:${a.id}`)).toBe(false);
+    expect(await ws.list()).toHaveLength(0);
+  });
+
   it('parallele create-Aufrufe verlieren keinen Eintrag', async () => {
     const { ws } = setup();
     await Promise.all([ws.create('klexel', 'A', 1), ws.create('klexel', 'B', 2), ws.create('klexel', 'C', 3)]);
