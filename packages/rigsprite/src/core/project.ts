@@ -339,5 +339,6 @@ export function toFrameInput(p: Project, animationId: string | null): FrameInput
     parts: p.parts,
     images,
     animation: animationById(p, animationId) ?? null,
+    depthLocked: p.settings.depthLocked,
   };
 }

@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Animation } from './animation';
 import { buildFrame, type FrameInput } from './frame';
 import { applyToPoint, dist } from './math';
+import { applyAnimationTemplate, ANIMATION_TEMPLATES } from './templates/animations';
+import { getPartMesh } from './mesh';
+import { getRestPose } from './rig';
+import { sampleAnimation } from './animation';
 import { buildGridMesh, computeWeights, type Mesh } from './mesh';
 import { autoFitPart, type Part } from './part';
 import { boneOrigin, computeWorldTransforms, type Pose } from './rig';
@@ -146,5 +150,67 @@ describe('buildFrame', () => {
       const c = buildFrame({ rig, parts, images: { img: { width: 40, height: 60 } }, animation: null }, 0);
       expect(byId(c, 'up').uvs).toBe(byId(b, 'up').uvs);
     });
+  });
+});
+
+describe('buildFrame with depth', () => {
+  const ys = (a: Float32Array) => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 1; i < a.length; i += 2) {
+      min = Math.min(min, a[i]);
+      max = Math.max(max, a[i]);
+    }
+    return max - min;
+  };
+
+  it('without depth values every template animation gives the plain 2D skinning, bit for bit', () => {
+    for (const t of ANIMATION_TEMPLATES) {
+      const tr = RIG_TEMPLATES.find((r) => r.id === t.rigTemplateId)!.rig;
+      const parts = tr.bones.map((b) =>
+        fixturePart({ id: b.id, imageId: 'img', boneId: b.id, ...autoFitPart(image, b) }),
+      );
+      const animation = applyAnimationTemplate(t, tr);
+      const { restWorld, restInverse } = getRestPose(tr);
+      for (const frame of [0, 5]) {
+        const got = buildFrame({ rig: tr, parts, images: { img: image }, animation }, frame);
+        const skin = skinMatrices(restWorld, computeWorldTransforms(tr, sampleAnimation(animation, frame)), restInverse);
+        got.items.forEach((item) => {
+          const part = parts.find((p) => p.id === item.partId)!;
+          const { mesh, weights } = getPartMesh(tr, part, image);
+          expect(Array.from(item.positions)).toEqual(Array.from(skinVertices(mesh, weights, skin)));
+          expect(item.depth ?? 0).toBe(0);
+        });
+      }
+    }
+  });
+
+  it('a tilted thigh gets shorter on screen and its item has a positive depth', () => {
+    const parts = [makePart('t', 'thigh_L')];
+    const flat = buildFrame(input(parts), 0);
+    const tilted = buildFrame(input(parts), 0, { thigh_L: { tilt: 60 } });
+    expect(ys(tilted.items[0].positions)).toBeLessThan(ys(flat.items[0].positions) * 0.8);
+    expect(tilted.items[0].depth).toBeGreaterThan(0);
+    expect(flat.items[0].depth ?? 0).toBe(0);
+  });
+
+  it('the projected world matrix of a tilted bone is foreshortened', () => {
+    const flat = buildFrame(input([]), 0);
+    const tilted = buildFrame(input([]), 0, { thigh_L: { tilt: 60 } });
+    expect(tilted.world.thigh_L).not.toEqual(flat.world.thigh_L);
+  });
+
+  it('a locked project ignores tilt, turn and depth from keys and extra pose', () => {
+    const parts = [makePart('t', 'thigh_L')];
+    const locked = { ...input(parts, anim({ thigh_L: { turn: [{ frame: 0, value: 30, easing: 'linear' }] } })), depthLocked: true };
+    const plain = input(parts, anim({}));
+    const a = buildFrame(locked, 0, { thigh_L: { tilt: 60, depth: 5 } });
+    const b = buildFrame(plain, 0);
+    expect(Array.from(a.items[0].positions)).toEqual(Array.from(b.items[0].positions));
+    expect(a.items[0].depth ?? 0).toBe(0);
+    expect(a.world).toEqual(b.world);
+    // unlocked, the same animation does change the frame
+    const free = buildFrame({ ...locked, depthLocked: false }, 0);
+    expect(Array.from(free.items[0].positions)).not.toEqual(Array.from(b.items[0].positions));
   });
 });

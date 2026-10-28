@@ -11,6 +11,7 @@ interface FrameKey {
   images: Project['images'];
   animation: Animation | null;
   frame: number;
+  depthLocked: boolean;
 }
 
 /**
@@ -30,6 +31,7 @@ export function createFrameCache(): (s: FrameState) => FrameData {
       images: s.project.images,
       animation: animationById(s.project, animationId) ?? null,
       frame: s.frame,
+      depthLocked: s.project.settings.depthLocked,
     };
     if (
       data &&
@@ -38,7 +40,8 @@ export function createFrameCache(): (s: FrameState) => FrameData {
       key.parts === next.parts &&
       key.images === next.images &&
       key.animation === next.animation &&
-      key.frame === next.frame
+      key.frame === next.frame &&
+      key.depthLocked === next.depthLocked
     ) {
       return data;
     }

@@ -62,4 +62,12 @@ describe('createFrameCache', () => {
     const p5 = { ...p4, images: { img: { ...p4.images.img, width: 40 } } };
     expectRebuild({ ...s, project: p5, frame: 3 });
   });
+
+  it('rebuilds when only the depth lock changes', () => {
+    const frameOf = createFrameCache();
+    const s = state();
+    const a = frameOf(s);
+    const locked = frameOf({ ...s, project: { ...s.project, settings: { ...s.project.settings, depthLocked: true } } });
+    expect(locked).not.toBe(a);
+  });
 });
