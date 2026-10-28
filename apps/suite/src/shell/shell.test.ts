@@ -316,3 +316,80 @@ async function startNewViaHost(host: AreaHost, content: unknown): Promise<void> 
   host.requestNewProject(undefined, content);
   await tick(100);
 }
+
+describe('startShell: Rückgabe an Klexel (host.returnToKlexel)', () => {
+  const toDataUrl = (w: number, h: number, px: Uint32Array) => `png:${w}x${h}:${px[0]}`;
+  const req = (name = 'walk', animationId = 'a1') => ({
+    name, width: 2, height: 1, fps: 10, origin: { animationId },
+    frames: [{ name: '', pixels: Uint32Array.of(7, 8) }, { name: '', pixels: Uint32Array.of(9, 9) }],
+  });
+  const withFromFrames = () => {
+    K.d.fromFrames = vi.fn(input => {
+      if (input.width > 128) throw new RangeError('zu groß');
+      return { kind: 'klexel' as const, v: input.frames.length };
+    });
+  };
+
+  it('fehlt ohne einen Bereich mit fromFrames', async () => {
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    expect(R.host!.returnToKlexel).toBeUndefined();
+    expect(R.host!.openProject).toBeTypeOf('function');
+  });
+
+  it('legt bei jedem Aufruf ein neues Projekt an (Herkunft, eindeutiger Name), ohne zu wechseln', async () => {
+    withFromFrames();
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    R.content = { kind: 'rigsprite', v: 5 }; // ungesicherte Änderung bleibt im Editor
+    const host = R.host!;
+    // gleichzeitig: beide eingereiht, zwei verschiedene Projekte
+    const [a, b] = await Promise.all([host.returnToKlexel!(req()), host.returnToKlexel!(req())]);
+    expect(a.projectId).not.toBe(b.projectId);
+    expect(a.name).toBe('walk (aus rigsprite)');
+    expect(b.name).toBe('walk (aus rigsprite) 2');
+    const list = await store.list();
+    const ma = list.find(m => m.id === a.projectId)!;
+    expect(ma.kind).toBe('klexel');
+    expect(ma.origin).toEqual({ rigProjectId: r.id, animationId: 'a1' });
+    expect(ma.thumbnail).toBe('png:2x1:7');
+    expect(await store.load(a.projectId)).toEqual({ kind: 'klexel', v: 2 });
+    expect(K.d.fromFrames).toHaveBeenCalledWith(expect.objectContaining({ name: 'walk', fps: 10 }));
+    // Rigsprite bleibt offen und unverändert; Klexel wurde nicht geladen
+    expect(K.d.load).not.toHaveBeenCalled();
+    expect(container('rigsprite').hidden).toBe(false);
+    expect(host.isActive()).toBe(true);
+    expect(R.content).toEqual({ kind: 'rigsprite', v: 5 });
+    expect(await store.load(r.id)).toEqual({ kind: 'rigsprite', v: 1 });
+    expect(await store.lastOpened()).toBe(r.id);
+    // erneute Rückgabe überschreibt nichts
+    const c = await host.returnToKlexel!(req());
+    expect(new Set([a.projectId, b.projectId, c.projectId]).size).toBe(3);
+    expect(await store.load(a.projectId)).toEqual({ kind: 'klexel', v: 2 });
+  });
+
+  it('Fehler: lehnt mit deutscher Meldung ab und legt nichts an', async () => {
+    withFromFrames();
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    await expect(R.host!.returnToKlexel!({ ...req(), width: 200 })).rejects.toThrow(/konnte nicht angelegt werden/);
+    expect((await store.list()).map(m => m.id)).toEqual([r.id]);
+    // die Warteschlange läuft danach weiter
+    await expect(R.host!.returnToKlexel!(req())).resolves.toMatchObject({ name: 'walk (aus rigsprite)' });
+  });
+
+  it('openProject öffnet das zurückgegebene Projekt über den Wechsel', async () => {
+    withFromFrames();
+    const r = await store.create('rigsprite', 'R', { kind: 'rigsprite', v: 1 });
+    await store.setLastOpened(r.id);
+    await startShell(app, descriptors(), { backend: kv, toDataUrl });
+    const { projectId } = await R.host!.returnToKlexel!(req());
+    await R.host!.openProject!(projectId);
+    expect(K.opened).toEqual([{ kind: 'klexel', v: 2 }]);
+    expect(container('klexel').hidden).toBe(false);
+    expect(await store.lastOpened()).toBe(projectId);
+  });
+});

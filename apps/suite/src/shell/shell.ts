@@ -4,7 +4,9 @@
 // Jeder Bereich wird beim ersten Projekt seiner Art in einen eigenen Container eingehängt (Klexel: #app, weitere:
 // #area-<art> daneben) und bleibt danach eingehängt; sichtbar und aktiv ist nur der Bereich des offenen Projekts.
 import './shell.css';
-import type { AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, ProjectMeta, SourceService } from '@suite/shared';
+import type {
+  AreaDescriptor, AreaHandle, AreaHost, KvBackend, NewProjectInit, ProjectMeta, ReturnRequest, ReturnResult, SourceService,
+} from '@suite/shared';
 import { WorkspaceStore, IdbBackend, migrateLegacy, DEFAULT_AUTOSAVE_DELAY_MS } from '@suite/shared';
 import { showToast, pixelsToDataUrl } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
@@ -159,6 +161,46 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     },
   };
 
+  // Rückgabe (Rigsprite → Klexel): nur, wenn ein Bereich dieses Builds aus Frames anlegen kann (fromFrames)
+  const returnTarget = descriptors.find(d => d.fromFrames);
+
+  /**
+   * Legt aus den Frames ein NEUES Projekt der Rückgabe-Art an (nie ein bestehendes überschreiben), ohne zu wechseln
+   * und ohne das offene Projekt anzufassen. Herkunft = offenes Projekt des aufrufenden Bereichs + Animation.
+   * Eingereiht, damit gleichzeitige Rückgaben und Wechsel/Speichern einander nicht stören (und Namen eindeutig bleiben).
+   */
+  function returnFrames(fromKind: string, req: ReturnRequest): Promise<ReturnResult> {
+    const d = returnTarget!;
+    return enqueue(async () => {
+      const rigProjectId = currentKind === fromKind ? currentId : null;
+      if (!rigProjectId) throw new Error('Kein offenes Projekt – nichts angelegt');
+      let payload: unknown;
+      try { payload = d.fromFrames!(req); } catch (err) {
+        console.error('Rückgabe nicht lesbar', err);
+        throw new Error(`${d.title}-Dokument konnte nicht angelegt werden${err instanceof RangeError ? ' (zu groß oder zu viele Frames)' : ''}`);
+      }
+      let thumbnail: string | undefined;
+      const firstFrame = req.frames[0];
+      try { if (firstFrame) thumbnail = toDataUrl(req.width, req.height, firstFrame.pixels); } catch { thumbnail = undefined; }
+      try {
+        const names = (await store.list()).map(m => m.name);
+        const base = `${req.name.trim() || 'Animation'} (aus ${slot(fromKind).d.title})`;
+        const meta = await store.add({
+          kind: d.kind,
+          name: nextUntitledName(names, base),
+          updatedAt: Date.now(),
+          ...(thumbnail ? { thumbnail } : {}),
+          origin: { rigProjectId, animationId: req.origin.animationId },
+        }, payload);
+        list?.refresh();
+        return { projectId: meta.id, name: meta.name };
+      } catch (err) {
+        console.error('Rückgabe konnte nicht gespeichert werden', err);
+        throw new Error(`${d.title}-Projekt konnte nicht gespeichert werden`);
+      }
+    });
+  }
+
   function hostFor(kind: string): AreaHost {
     return {
       // Meldungen eines verdeckten Bereichs betreffen nicht das offene Projekt
@@ -169,6 +211,8 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       isActive: () => !switching && currentKind === kind,
       openProjects: () => openList(),
       ...(sources ? { sources } : {}),
+      ...(returnTarget && returnTarget.kind !== kind ? { returnToKlexel: (req: ReturnRequest) => returnFrames(kind, req) } : {}),
+      openProject: id => switchProject(id),
     };
   }
 

@@ -1,5 +1,6 @@
 import type { ProjectKind } from './workspace/types';
 import type { SourceService } from './sources';
+import type { ReturnRequest, ReturnResult } from './returnDoc';
 
 /** Größte Bildbreite/-höhe neuer Projekte (Klexel: MAX_SIZE). */
 export const MAX_IMAGE_SIZE = 128;
@@ -26,6 +27,14 @@ export interface AreaHost {
   isActive(): boolean;
   /** Bild-Quellen anderer Projekte (Klexel-Frames); fehlt, wenn kein Bereich dieses Builds Frames liefern kann. */
   sources?: SourceService;
+  /**
+   * Animation als NEUES Klexel-Projekt anlegen (Rigsprite → Klexel); das offene Projekt bleibt offen und unverändert,
+   * jeder Aufruf legt ein weiteres Projekt an. Herkunft = das offene Projekt + animationId. Lehnt mit deutscher
+   * Meldung ab. Fehlt, wenn kein Bereich dieses Builds aus Frames anlegen kann (AreaDescriptor.fromFrames).
+   */
+  returnToKlexel?(req: ReturnRequest): Promise<ReturnResult>;
+  /** Öffnet ein Projekt per ID (eingereiht wie ein Wechsel in der Projektliste). */
+  openProject?(id: string): Promise<void>;
 }
 
 /** Steuerung eines eingehängten Bereichs durch die Hülle. */
