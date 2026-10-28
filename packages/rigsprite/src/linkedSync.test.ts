@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SourceService } from '@suite/shared';
 import { linkedSourceIds, syncLinkedSources } from './areaLogic';
 import { carryLinkedUpdate, linkFramesAsImages, refreshLinkedImages, type SourceFrame, type SourceResult } from './core/linkedSprites';
-import { createProject, type Project } from './core/project';
+import { createProject, parseProjectData, serializeProject, type Project } from './core/project';
 import { useEditor } from './state/store';
 
 const frame = (frameId: number, name: string, px = 'A'): SourceFrame => ({
@@ -144,6 +144,102 @@ describe('carryLinkedUpdate', () => {
     const q = createProject('humanoid');
     expect(carryLinkedUpdate(q, before, before)).toBe(q);
   });
+
+  it('neue Bilder nicht in Zustände vor dem Verknüpfen (keine Waisen)', () => {
+    const before = linkedProject();
+    const after = refreshLinkedImages(before, 'k1', src(frame(1, 'head'), frame(2, 'random'), frame(3, 'upperArm_L'))).project;
+    const unlinked = createProject('humanoid');
+    expect(carryLinkedUpdate(unlinked, before, after)).toBe(unlinked);
+    // nur k2 verknüpft: k1-Bilder und k1-Liste bleiben draußen
+    const onlyK2 = linkFramesAsImages(createProject('humanoid'), 'k2', src(frame(1, 'torso'))).project;
+    const c2 = carryLinkedUpdate(onlyK2, before, after);
+    expect(linkedSourceIds(c2)).toEqual(['k2']);
+    expect(c2.linkedFrames?.k1).toBeUndefined();
+  });
+});
+
+describe('linkedFrames: entfernte Sprites kehren nicht zurück', () => {
+  const removeImage = (p: Project, id: string): Project => {
+    const images = { ...p.images };
+    delete images[id];
+    return { ...p, images, parts: p.parts.filter((x) => x.imageId !== id) };
+  };
+  const base = () => linkFramesAsImages(createProject('humanoid'), 'k1', src(frame(1, 'head'), frame(2, 'random'))).project;
+
+  it('Verknüpfen merkt sich die angelegten Frames', () => {
+    expect(base().linkedFrames).toEqual({ k1: [1, 2] });
+  });
+
+  it('entferntes Sprite: Sync legt es nicht wieder an; ein neuer Frame wird angelegt', () => {
+    const p0 = base();
+    const without = removeImage(p0, imageOf(p0, 'k1', 1).id);
+    const r = refreshLinkedImages(without, 'k1', src(frame(1, 'head'), frame(2, 'random')));
+    expect(r.added).toEqual([]);
+    expect(r.project).toBe(without);
+    const r2 = refreshLinkedImages(without, 'k1', src(frame(1, 'head'), frame(2, 'random'), frame(3, 'upperArm_L')));
+    expect(r2.added).toHaveLength(1);
+    expect(imageOf(r2.project, 'k1', 3)).toBeDefined();
+    expect(imageOf(r2.project, 'k1', 1)).toBeUndefined();
+    expect(r2.project.linkedFrames).toEqual({ k1: [1, 2, 3] });
+  });
+
+  it('syncLinkedSources legt ein entferntes Sprite nicht wieder an', async () => {
+    const p0 = base();
+    const { t, target: tg } = target(removeImage(p0, imageOf(p0, 'k1', 1).id));
+    const before = t.project;
+    await syncLinkedSources({ list: async () => [], read: async () => src(frame(1, 'head'), frame(2, 'random')) }, tg);
+    expect(t.project).toBe(before);
+  });
+
+  it('explizites erneutes Verknüpfen legt fehlende Frames wieder an und setzt die Liste neu', () => {
+    const p0 = base();
+    const without = removeImage(p0, imageOf(p0, 'k1', 1).id);
+    const r = linkFramesAsImages(without, 'k1', src(frame(1, 'head')));
+    expect(r.added).toHaveLength(1);
+    expect(imageOf(r.project, 'k1', 1).name).toBe('head');
+    expect(r.project.linkedFrames).toEqual({ k1: [1, 2] }); // Frame 2 hat noch ein Bild
+    const gone = removeImage(r.project, imageOf(r.project, 'k1', 2).id);
+    expect(linkFramesAsImages(gone, 'k1', src(frame(1, 'head'))).project.linkedFrames).toEqual({ k1: [1] });
+  });
+
+  it('alte Projekte ohne Feld: der erste Sync merkt sich die vorhandenen Frames', () => {
+    const old: Project = { ...base() };
+    delete old.linkedFrames;
+    const r = refreshLinkedImages(old, 'k1', src(frame(1, 'head'), frame(2, 'random')));
+    expect(r.project.linkedFrames).toEqual({ k1: [1, 2] });
+    expect(refreshLinkedImages(r.project, 'k1', src(frame(1, 'head'), frame(2, 'random'))).project).toBe(r.project);
+  });
+
+  it('Round-Trip über Datei; ungültige Einträge still verworfen; alte Datei ohne Feld bleibt ohne', () => {
+    const raw = JSON.parse(serializeProject(base()));
+    const back = parseProjectData(raw);
+    expect(back.ok && back.project.linkedFrames).toEqual({ k1: [1, 2] });
+    raw.linkedFrames = { k1: [1, 0, -2, 1.5, 'x', 2, 2], '': [1], k2: 'nein', k3: [], k4: [7] };
+    const r = parseProjectData(raw);
+    expect(r.ok && r.project.linkedFrames).toEqual({ k1: [1, 2], k4: [7] });
+    raw.linkedFrames = 'kaputt';
+    const r2 = parseProjectData(raw);
+    expect(r2.ok && 'linkedFrames' in r2.project).toBe(false);
+    delete raw.linkedFrames;
+    const r3 = parseProjectData(raw);
+    expect(r3.ok).toBe(true);
+    expect(r3.ok && 'linkedFrames' in r3.project).toBe(false);
+  });
+
+  it('Store: entferntes Sprite bleibt nach Aktualisieren weg; Undo/Redo-Zustände tragen die Liste mit', () => {
+    useEditor.getState().loadProject(createProject('humanoid'));
+    const s = () => useEditor.getState();
+    s().linkSource('k1', src(frame(1, 'head'), frame(2, 'random')));
+    s().removeImage(imageOf(s().project, 'k1', 1).id);
+    const r = refreshLinkedImages(s().project, 'k1', src(frame(1, 'head'), frame(2, 'random'), frame(3, 'x')));
+    s().applyLinkedUpdate(r.project);
+    expect(imageOf(s().project, 'k1', 1)).toBeUndefined();
+    expect(imageOf(s().project, 'k1', 3)).toBeDefined();
+    s().undo(); // Entfernen rückgängig: Bild 1 wieder da, Frame 3 bleibt, Liste vollständig
+    expect(imageOf(s().project, 'k1', 1)).toBeDefined();
+    expect(imageOf(s().project, 'k1', 3)).toBeDefined();
+    expect(s().project.linkedFrames).toEqual({ k1: [1, 2, 3] });
+  });
 });
 
 describe('Store: linkSource / applyLinkedUpdate', () => {
@@ -196,6 +292,23 @@ describe('Store: linkSource / applyLinkedUpdate', () => {
     expect(s().project.name).not.toBe('gezogen');
     expect(imageOf(s().project, 'k1', 1).dataUrl).toBe('data:image/png;base64,T1');
     expect(useEditor.temporal.getState().isTracking).toBe(true);
+  });
+
+  it('wirft das Übertragen in den Verlauf, bleibt alles unverändert und der Verlauf läuft weiter', () => {
+    s().linkSource('k1', src(frame(1, 'head')));
+    const good = s().project;
+    // kaputter Verlaufseintrag: carryLinkedUpdate wirft daran
+    const pastStates = useEditor.temporal.getState().pastStates;
+    useEditor.temporal.setState({ pastStates: [{ project: { ...good, images: undefined as never } }, ...pastStates] });
+    const next = refreshLinkedImages(good, 'k1', src(frame(1, 'head', 'X'))).project;
+    expect(() => s().applyLinkedUpdate(next)).toThrow();
+    expect(s().project).toBe(good);
+    expect(useEditor.temporal.getState().isTracking).toBe(true);
+    useEditor.temporal.setState({ pastStates });
+    s().setProjectName('danach');
+    expect(past()).toBe(2);
+    s().undo();
+    expect(s().project).toBe(good);
   });
 
   it('meldet die Änderung an Abonnenten (Autosave der Hülle)', () => {

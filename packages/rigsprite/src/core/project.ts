@@ -28,6 +28,12 @@ export interface Project {
   parts: Part[];
   animations: Animation[];
   settings: ProjectSettings;
+  /**
+   * Per source project id (Klexel): the frame ids that were already created as an image once. A sync creates
+   * images only for frames not listed here, so a linked sprite the user removed does not come back; an explicit
+   * "Aus Klexel…" rebuilds missing ones and resets the list. Absent in projects without links (and old files).
+   */
+  linkedFrames?: Record<string, number[]>;
 }
 
 /** Normalizes a camera angle to (-180, 180] and rounds away float drift (1e-6 degrees). */
@@ -130,6 +136,18 @@ function parseSource(v: unknown): ImageSource | undefined {
   if (name !== undefined) out.name = name;
   if (missing) out.missing = true;
   return out;
+}
+
+/** Valid entries of linkedFrames (non-empty id → distinct positive integers); invalid parts are dropped silently. */
+function parseLinkedFrames(raw: unknown): Record<string, number[]> | undefined {
+  if (!isObj(raw)) return undefined;
+  const out: Record<string, number[]> = {};
+  for (const [id, v] of Object.entries(raw)) {
+    if (id === '' || id === '__proto__' || !Array.isArray(v)) continue;
+    const ids = [...new Set(v.filter((n): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0))];
+    if (ids.length) out[id] = ids;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function parseImage(key: string, v: unknown): ImageAsset {
@@ -271,6 +289,8 @@ export function parseProjectData(data: unknown): ParseResult {
       animations,
       settings,
     };
+    const linkedFrames = parseLinkedFrames(data.linkedFrames);
+    if (linkedFrames) project.linkedFrames = linkedFrames;
     return { ok: true, project };
   } catch (e) {
     if (e instanceof ParseError) return { ok: false, error: e.message };

@@ -299,7 +299,7 @@ export const useEditor = create<EditorState>()(
         addImages: (images) => patchProject((p) => addImagesAutoAttach(p, images)),
         linkSource: (projectId, source) => {
           const r = linkFramesAsImages(get().project, projectId, source);
-          if (r.added.length) set({ project: r.project });
+          if (r.project !== get().project) set({ project: r.project });
           return r.added;
         },
         applyLinkedUpdate: (project) => {
@@ -310,15 +310,22 @@ export const useEditor = create<EditorState>()(
           // Paused already during a transaction / edit group: leave that pause in place.
           const tracking = h.isTracking;
           if (tracking) h.pause();
-          if (editGroupStart) editGroupStart = carry(editGroupStart);
-          set((s) => ({
-            project,
-            transaction: s.transaction ? { startProject: carry(s.transaction.startProject) } : null,
-          }));
-          const carryStates = (states: Partial<{ project: Project }>[]) =>
-            states.map((st) => (st.project ? { ...st, project: carry(st.project) } : st));
-          useEditor.temporal.setState({ pastStates: carryStates(h.pastStates), futureStates: carryStates(h.futureStates) });
-          if (tracking) h.resume();
+          try {
+            const carryStates = (states: Partial<{ project: Project }>[]) =>
+              states.map((st) => (st.project ? { ...st, project: carry(st.project) } : st));
+            // Compute everything first, then write: a throw leaves project and history untouched
+            const pastStates = carryStates(h.pastStates);
+            const futureStates = carryStates(h.futureStates);
+            const groupStart = editGroupStart ? carry(editGroupStart) : null;
+            const tx = get().transaction;
+            const transaction = tx ? { startProject: carry(tx.startProject) } : null;
+            set({ project, transaction });
+            if (groupStart) editGroupStart = groupStart;
+            useEditor.temporal.setState({ pastStates, futureStates });
+          } finally {
+            // Always resume, so a failed update never leaves the history switched off
+            if (tracking) h.resume();
+          }
         },
         attachImage: (imageId, boneId) => {
           const { project } = get();

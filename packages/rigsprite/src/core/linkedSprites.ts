@@ -10,12 +10,31 @@ export type { SourceFrame, SourceResult };
 
 const DEFAULT_NAME = /^Frame \d+$/;
 
-/** New linked images for the frames of `source` that no image of `projectId` links yet. */
-function newImages(p: Project, projectId: string, source: SourceResult): ImageAsset[] {
-  const known = new Set<number>();
+/** Frame ids of `projectId` that currently have an image. */
+function framesWithImage(p: Project, projectId: string): Set<number> {
+  const ids = new Set<number>();
   for (const img of Object.values(p.images)) {
-    if (img.source?.projectId === projectId) known.add(img.source.frameId);
+    if (img.source?.projectId === projectId) ids.add(img.source.frameId);
   }
+  return ids;
+}
+
+/** `p` with linkedFrames[projectId] = `ids` (sorted); the same object if that is already the list. */
+function withLinkedFrames(p: Project, projectId: string, ids: Iterable<number>): Project {
+  const next = [...new Set(ids)].sort((a, b) => a - b);
+  const cur = p.linkedFrames?.[projectId];
+  if (cur && cur.length === next.length && cur.every((n, i) => n === next[i])) return p;
+  if (!cur && next.length === 0) return p;
+  return { ...p, linkedFrames: { ...p.linkedFrames, [projectId]: next } };
+}
+
+/**
+ * New linked images for the frames of `source` that no image of `projectId` links yet. Unless `rebuild`, frames
+ * listed in linkedFrames (created once, removed by the user since) are skipped too: only really new frames.
+ */
+function newImages(p: Project, projectId: string, source: SourceResult, rebuild: boolean): ImageAsset[] {
+  const known = framesWithImage(p, projectId);
+  if (!rebuild) for (const id of p.linkedFrames?.[projectId] ?? []) known.add(id);
   const out: ImageAsset[] = [];
   source.frames.forEach((f, i) => {
     if (known.has(f.frameId)) return;
@@ -32,15 +51,30 @@ function newImages(p: Project, projectId: string, source: SourceResult): ImageAs
   return out;
 }
 
-/** First-time link: one image per source frame not yet linked; auto-attached by name (new images only). */
+/** Adds `imgs` (auto-attached by name) and records their frames in linkedFrames (on top of `base` ids). */
+function addLinked(p: Project, projectId: string, imgs: ImageAsset[], base: Iterable<number>): { project: Project; added: string[] } {
+  let project = imgs.length ? addImagesAutoAttach(p, imgs) : p;
+  project = withLinkedFrames(project, projectId, [...base, ...imgs.map((i) => i.source!.frameId)]);
+  return { project, added: imgs.map((i) => i.id) };
+}
+
+/**
+ * Explicit link ("Aus Klexel…"): one image per source frame without an image - also frames the user removed
+ * before (deliberate rebuild); auto-attached by name (new images only). Resets linkedFrames to the frames that
+ * have an image afterwards.
+ */
 export function linkFramesAsImages(
   p: Project,
   projectId: string,
   source: SourceResult,
 ): { project: Project; added: string[] } {
-  const imgs = newImages(p, projectId, source);
-  if (imgs.length === 0) return { project: p, added: [] };
-  return { project: addImagesAutoAttach(p, imgs), added: imgs.map((i) => i.id) };
+  return addLinked(p, projectId, newImages(p, projectId, source, true), framesWithImage(p, projectId));
+}
+
+/** Sync part of refreshLinkedImages: images only for really new frames; linkedFrames remembers them all. */
+function addNewFrames(p: Project, projectId: string, source: SourceResult): { project: Project; added: string[] } {
+  const base = [...(p.linkedFrames?.[projectId] ?? []), ...framesWithImage(p, projectId)];
+  return addLinked(p, projectId, newImages(p, projectId, source, false), base);
 }
 
 /**
@@ -105,7 +139,7 @@ export function refreshLinkedImages(
   let project: Project = changed ? { ...p, images } : p;
   let added: string[] = [];
   if (source) {
-    const r = linkFramesAsImages(project, projectId, source);
+    const r = addNewFrames(project, projectId, source);
     project = r.project;
     added = r.added;
   }
@@ -118,10 +152,13 @@ export function refreshLinkedImages(
  * stepping through the history never brings back stale pixels or drops sprites the update added.
  *  - Linked images changed by the update get its pixels, size and link state in `q` (if `q` has them); the name only
  *    if `q` still carries the name the update replaced (a user rename in `q` stays).
- *  - Images new in the update are added to `q`; parts new in the update (auto-attach) too, if their bone exists in `q`.
+ *  - Images new in the update are added to `q` only if `q` already links that source project (no orphans in states
+ *    from before the link); parts new in the update (auto-attach) too, if their image and bone exist in `q`.
+ *  - linkedFrames of the source projects `q` links become the union of `q`'s and the update's list.
  *  - Everything else in `q` stays. Returns `q` itself if nothing applies.
  */
 export function carryLinkedUpdate(q: Project, before: Project, after: Project): Project {
+  const linksOf = (pid: string) => Object.values(q.images).some((i) => i.source?.projectId === pid);
   let images: Record<string, ImageAsset> | null = null;
   for (const [id, img] of Object.entries(after.images)) {
     const old = before.images[id];
@@ -130,6 +167,7 @@ export function carryLinkedUpdate(q: Project, before: Project, after: Project): 
     let next: ImageAsset;
     if (cur === undefined) {
       if (old !== undefined) continue; // the image was added after (or removed before) `q`: leave `q` alone
+      if (!img.source || !linksOf(img.source.projectId)) continue;
       next = img;
     } else {
       if (!img.source) continue;
@@ -145,6 +183,12 @@ export function carryLinkedUpdate(q: Project, before: Project, after: Project): 
   const parts = after.parts.filter(
     (p) => !known.has(p.id) && !have.has(p.id) && finalImages[p.imageId] && boneById(q.rig, p.boneId),
   );
-  if (!images && parts.length === 0) return q;
-  return { ...q, images: finalImages, parts: parts.length ? [...q.parts, ...parts] : q.parts };
+  let out: Project = !images && parts.length === 0 ? q : { ...q, images: finalImages, parts: parts.length ? [...q.parts, ...parts] : q.parts };
+  if (after.linkedFrames !== before.linkedFrames) {
+    for (const [pid, ids] of Object.entries(after.linkedFrames ?? {})) {
+      if (ids === before.linkedFrames?.[pid] || !linksOf(pid)) continue;
+      out = withLinkedFrames(out, pid, [...(out.linkedFrames?.[pid] ?? []), ...ids]);
+    }
+  }
+  return out;
 }

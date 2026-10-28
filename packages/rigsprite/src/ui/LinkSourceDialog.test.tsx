@@ -6,6 +6,7 @@ import type { LinkedSyncSummary } from '../areaLogic';
 import { createProject } from '../core/project';
 import { useEditor } from '../state/store';
 import { LinkSourceDialog } from './LinkSourceDialog';
+import { useGlobalShortcuts } from './shortcuts';
 import { SpritesPanel, syncMessage } from './SpritesPanel';
 import { SuiteContext, type SuiteBridge } from './suiteBridge';
 
@@ -76,6 +77,28 @@ describe('LinkSourceDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Figur/ }));
     expect((await screen.findByRole('alert')).textContent).toContain('nicht mehr vorhanden');
     expect(onClose).not.toHaveBeenCalled();
+    expect(Object.keys(useEditor.getState().project.images)).toHaveLength(0);
+  });
+
+  it.each(['Escape', 'Abbrechen'])('%s während des Lesens: das Ergebnis verknüpft nichts mehr', async (how) => {
+    let release!: (r: SourceResult) => void;
+    const onClose = vi.fn();
+    const onLinked = vi.fn();
+    const sources = fakeSources({ read: () => new Promise((res) => (release = res)) });
+    function Harness() {
+      useGlobalShortcuts(); // Escape läuft über die globalen Tastenkürzel
+      return <LinkSourceDialog sources={sources} onClose={onClose} onLinked={onLinked} />;
+    }
+    const { unmount } = render(<Harness />);
+    fireEvent.click(await screen.findByRole('button', { name: /Figur/ }));
+    if (how === 'Escape') fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+    else fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount(); // der Aufrufer schließt den Dialog
+    release(result());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onLinked).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(Object.keys(useEditor.getState().project.images)).toHaveLength(0);
   });
 

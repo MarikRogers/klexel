@@ -179,6 +179,9 @@ describe('rigspriteArea mit Klexel-Quellen', () => {
     px = 'A';
     readImpl = async () => source();
     read.mockClear();
+    // Der Store ist ein Modul-Singleton: ohne Zurücksetzen startete die Sprite-Leiste mit den Verknüpfungen des
+    // vorigen Tests und ihr asynchrones sources.list() liefe außerhalb von act
+    useEditor.getState().loadProject(createProject('humanoid'));
     act(() => {
       handle = mountRigsprite(root, srcHost);
     });
@@ -202,11 +205,12 @@ describe('rigspriteArea mit Klexel-Quellen', () => {
   });
 
   it('Wieder-Aktivieren gleicht erneut ab; ein unmittelbar folgendes setActive(true) liest nicht doppelt', async () => {
-    act(() => {
+    // wie die Hülle nach dem Öffnen: setActive(true) läuft mit dem Abgleich von open zusammen
+    await act(async () => {
       handle!.open(linked());
       handle!.setActive(true);
-    }); // wie die Hülle nach dem Öffnen: läuft mit dem Abgleich von open zusammen
-    await flushAsync();
+      await new Promise((r) => setTimeout(r, 0));
+    });
     expect(read).toHaveBeenCalledTimes(1);
     act(() => handle!.setActive(false));
     px = 'C';
@@ -225,7 +229,10 @@ describe('rigspriteArea mit Klexel-Quellen', () => {
   it('Ergebnis eines älteren Projekts wird nach erneutem open verworfen', async () => {
     let release!: (r: SourceResult) => void;
     readImpl = () => new Promise((res) => (release = res));
-    await act(async () => handle!.open(linked()));
+    await act(async () => {
+      handle!.open(linked());
+      await new Promise((r) => setTimeout(r, 0));
+    });
     const other = createProject('humanoid', 'Anderes');
     act(() => handle!.open(other));
     px = 'Z';

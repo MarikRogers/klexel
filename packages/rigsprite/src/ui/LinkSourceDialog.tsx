@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProjectMeta, SourceService } from '@suite/shared';
 import { errorMessage } from '../core/messages';
 import { useEditor } from '../state/store';
@@ -31,7 +31,19 @@ export function LinkSourceDialog({
   const [list, setList] = useState<ListState>({ status: 'loading' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEscape(true, onClose);
+  // Closed (Escape, Abbrechen, unmounted) while a read is pending: its result must not link anything anymore
+  const closed = useRef(false);
+  const cancel = () => {
+    closed.current = true;
+    onClose();
+  };
+  useEscape(true, cancel);
+  useEffect(() => {
+    closed.current = false; // StrictMode mounts twice
+    return () => {
+      closed.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +61,7 @@ export function LinkSourceDialog({
     setError(null);
     try {
       const result = await sources.read(m.id);
+      if (closed.current) return;
       if (!result) {
         setError(`„${m.name}" ist nicht mehr vorhanden oder nicht lesbar`);
         return;
@@ -57,6 +70,7 @@ export function LinkSourceDialog({
       onLinked(added.length, result.projectName || m.name);
       onClose();
     } catch (e) {
+      if (closed.current) return;
       setError(`Klexel-Projekt konnte nicht gelesen werden: ${errorMessage(e)}`);
     } finally {
       setBusy(false);
@@ -93,7 +107,7 @@ export function LinkSourceDialog({
           </div>
         )}
         <div className="dialog-actions">
-          <button onClick={onClose}>Abbrechen</button>
+          <button onClick={cancel}>Abbrechen</button>
         </div>
       </div>
     </div>
