@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ANIMATION_TEMPLATES, applyAnimationTemplate } from './animations';
 import { RIG_TEMPLATES } from './rigs';
-import { sampleChannel } from '../animation';
-import type { Rig } from '../rig';
+import { sampleAnimation, sampleChannel } from '../animation';
+import { boneOrigin, boneTip, computeWorldTransforms, rigHeight, type Rig, type RigTemplateId } from '../rig';
+import { createProject, parseProject, serializeProject } from '../project';
 
 const rigOf = (id: string) => RIG_TEMPLATES.find((r) => r.id === id)!.rig;
 const tpl = (id: string) => ANIMATION_TEMPLATES.find((t) => t.id === id)!;
@@ -12,6 +13,11 @@ describe('animation templates', () => {
     expect(ANIMATION_TEMPLATES.map((t) => t.id)).toEqual([
       'humanoid-idle', 'humanoid-walk', 'humanoid-run', 'humanoid-jump', 'humanoid-punch',
       'quadruped-idle', 'quadruped-walk',
+      'humanoid-front-idle', 'humanoid-front-walk', 'humanoid-front-run', 'humanoid-front-jump',
+      'humanoid-front-punch',
+      'humanoid-back-idle', 'humanoid-back-walk', 'humanoid-back-run', 'humanoid-back-jump', 'humanoid-back-punch',
+      'quadruped-front-idle', 'quadruped-front-walk',
+      'quadruped-back-idle', 'quadruped-back-walk',
     ]);
     expect(tpl('humanoid-walk').name).toBe('walk');
   });
@@ -108,5 +114,132 @@ describe('animation templates', () => {
     const t = tpl('humanoid-walk');
     const anim = applyAnimationTemplate(t, flat);
     expect(anim.tracks['hip'].y).toEqual(t.tracks.hip.y);
+  });
+});
+
+describe('front and back view animation templates', () => {
+  const VIEWS: [RigTemplateId, RigTemplateId][] = [
+    ['humanoid-front', 'humanoid'],
+    ['humanoid-back', 'humanoid'],
+    ['quadruped-front', 'quadruped'],
+    ['quadruped-back', 'quadruped'],
+  ];
+  const ofRig = (id: RigTemplateId) => ANIMATION_TEMPLATES.filter((t) => t.rigTemplateId === id);
+
+  it.each(VIEWS)('%s has the same set (names, fps, length, loop) as %s', (view, side) => {
+    const strip = (id: RigTemplateId) => ofRig(id).map((t) => [t.name, t.fps, t.length, t.loop]);
+    expect(strip(view)).toEqual(strip(side));
+    for (const t of ofRig(view)) expect(t.id).toBe(`${view}-${t.name}`);
+  });
+
+  it('every rig template id of an animation exists', () => {
+    for (const t of ANIMATION_TEMPLATES) expect(RIG_TEMPLATES.some((r) => r.id === t.rigTemplateId)).toBe(true);
+  });
+
+  it.each(VIEWS.map(([v]) => v))('%s: every frame keeps the rig finite, on screen and joints together', (view) => {
+    const rig = rigOf(view);
+    const h = rigHeight(rig);
+    for (const t of ofRig(view)) {
+      const anim = applyAnimationTemplate(t, rig);
+      for (let f = 0; f <= t.length; f += 0.5) {
+        const world = computeWorldTransforms(rig, sampleAnimation(anim, f));
+        for (const b of rig.bones) {
+          for (const p of [boneOrigin(world[b.id]), boneTip(world[b.id], b)]) {
+            expect(Number.isFinite(p.x) && Number.isFinite(p.y), `${t.id}@${f}:${b.name}`).toBe(true);
+            expect(Math.abs(p.x), `${t.id}@${f}:${b.name}.x`).toBeLessThan(h);
+            expect(Math.abs(p.y), `${t.id}@${f}:${b.name}.y`).toBeLessThan(h);
+          }
+        }
+      }
+    }
+  });
+
+  it.each(VIEWS.map(([v]) => v))('%s: applied animations survive the project round trip', (view) => {
+    const p = createProject(view);
+    p.animations = ofRig(view).map((t) => applyAnimationTemplate(t, p.rig));
+    const r = parseProject(serializeProject(p));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.project.rigTemplateId).toBe(view);
+    // via JSON: -0 in sampled keys is written as 0
+    expect(r.project.animations).toEqual(JSON.parse(JSON.stringify(p.animations)));
+  });
+
+  const hipShiftAtLift = (id: string, rootName: string, stanceBone: string, lifted: string) => {
+    const rig = rigOf(id.split('-').slice(0, 2).join('-'));
+    const t = tpl(id);
+    // find the frame where the lifted leg is shortest
+    const track = t.tracks[lifted].scaleX!;
+    const k = track.reduce((a, b) => (b.value < a.value ? b : a));
+    const shift = sampleChannel(t.tracks[rootName].x!, k.frame, 0);
+    const stanceX = boneOrigin(computeWorldTransforms(rig)[stanceBone]).x;
+    return { shift, stanceX };
+  };
+
+  it.each(['humanoid-front-walk', 'humanoid-back-walk', 'humanoid-front-run', 'humanoid-back-run'])(
+    '%s shifts the hip over the stance leg (screen side flips between views)',
+    (id) => {
+      const { shift, stanceX } = hipShiftAtLift(id, 'hip', 'thigh_R', 'thigh_L');
+      expect(Math.abs(shift)).toBeGreaterThan(0.5);
+      expect(Math.sign(shift)).toBe(Math.sign(stanceX));
+    },
+  );
+
+  it('front and back walk shift the hip to opposite screen sides', () => {
+    const front = tpl('humanoid-front-walk').tracks.hip.x!;
+    const back = tpl('humanoid-back-walk').tracks.hip.x!;
+    front.forEach((k, i) => expect(back[i].value).toBeCloseTo(-k.value, 6));
+  });
+
+  it.each(['quadruped-front-walk', 'quadruped-back-walk'])('%s lifts diagonal pairs and shifts to the stance side', (id) => {
+    const t = tpl(id);
+    for (const f of [0, 2, 4, 6, 10]) {
+      expect(sampleChannel(t.tracks.frontUpper_L.scaleX!, f, 1)).toBeCloseTo(sampleChannel(t.tracks.backUpper_R.scaleX!, f, 1), 6);
+      expect(sampleChannel(t.tracks.frontUpper_R.scaleX!, f, 1)).toBeCloseTo(sampleChannel(t.tracks.backUpper_L.scaleX!, f, 1), 6);
+    }
+    const { shift, stanceX } = hipShiftAtLift(id, 'body', 'frontUpper_R', 'frontUpper_L');
+    expect(Math.sign(shift)).toBe(Math.sign(stanceX));
+  });
+
+  it.each(['humanoid-front-walk', 'humanoid-back-walk'])('%s lifts legs alternately by foreshortening', (id) => {
+    const t = tpl(id);
+    const l = (f: number) => sampleChannel(t.tracks.thigh_L.scaleX!, f, 1);
+    const r = (f: number) => sampleChannel(t.tracks.thigh_R.scaleX!, f, 1);
+    expect(l(4)).toBeLessThan(0.95);
+    expect(r(4)).toBeCloseTo(1, 6);
+    expect(r(12)).toBeLessThan(0.95);
+    expect(l(12)).toBeCloseTo(1, 6);
+  });
+
+  it('front punch: the right arm comes toward the viewer (scaled up uniformly at the strike)', () => {
+    const t = tpl('humanoid-front-punch');
+    const strike = sampleChannel(t.tracks.upperArm_R.scaleX!, 4, 1);
+    expect(strike).toBeGreaterThanOrEqual(1.15);
+    expect(strike).toBeLessThanOrEqual(1.25);
+    expect(t.tracks.upperArm_R.scaleY).toEqual(t.tracks.upperArm_R.scaleX);
+  });
+
+  it('back punch: the right arm goes away from the viewer (scaled down uniformly at the strike)', () => {
+    const t = tpl('humanoid-back-punch');
+    const strike = sampleChannel(t.tracks.upperArm_R.scaleX!, 4, 1);
+    expect(strike).toBeGreaterThanOrEqual(0.8);
+    expect(strike).toBeLessThanOrEqual(0.9);
+    expect(sampleChannel(t.tracks.upperArm_R.scaleX!, 2, 1)).toBeGreaterThan(1);
+    expect(t.tracks.upperArm_R.scaleY).toEqual(t.tracks.upperArm_R.scaleX);
+  });
+
+  it.each(['humanoid-front', 'humanoid-back'])('%s-jump raises the arms outward on screen', (view) => {
+    const rig = rigOf(view);
+    const anim = applyAnimationTemplate(tpl(`${view}-jump`), rig);
+    const rest = computeWorldTransforms(rig);
+    const up = computeWorldTransforms(rig, sampleAnimation(anim, 6));
+    for (const s of ['L', 'R']) {
+      const b = rig.bones.find((x) => x.name === `hand_${s}`)!;
+      const r0 = boneTip(rest[b.id], b);
+      const r1 = boneTip(up[b.id], b);
+      expect(Math.sign(r1.x)).toBe(Math.sign(r0.x));
+      expect(Math.abs(r1.x)).toBeGreaterThan(Math.abs(r0.x));
+      expect(r1.y).toBeLessThan(r0.y);
+    }
   });
 });

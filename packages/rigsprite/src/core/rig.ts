@@ -134,7 +134,13 @@ export function defaultSoftness(length: number): number {
   return Math.max(4, Math.round(0.25 * length));
 }
 
-export type RigTemplateId = 'humanoid' | 'quadruped';
+export type RigTemplateId =
+  | 'humanoid'
+  | 'quadruped'
+  | 'humanoid-front'
+  | 'humanoid-back'
+  | 'quadruped-front'
+  | 'quadruped-back';
 
 export interface RigTemplate {
   id: RigTemplateId;

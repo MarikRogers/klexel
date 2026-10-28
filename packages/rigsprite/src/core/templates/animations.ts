@@ -2,7 +2,7 @@ import { newId } from '../id';
 import type { Animation, BoneTrack, Channel, Easing, Keyframe } from '../animation';
 import { TAU } from '../math';
 import { rigHeight, type Rig, type RigTemplateId } from '../rig';
-import { RIG_TEMPLATES } from './rigs';
+import { outward, RIG_TEMPLATES, type ViewSide } from './rigs';
 
 export interface AnimationTemplate {
   id: string;
@@ -183,6 +183,219 @@ const quadrupedWalk: AnimationTemplate = {
   tracks: quadrupedWalkTracks(),
 };
 
+/*
+ * Front and back views.
+ *
+ * Limbs cannot swing forward/backward in the picture plane, so the frontal sets use: vertical bob (y of the
+ * root), lateral weight shift (x of the root, small torso lean), leg lift as foreshortening (scaleX of the
+ * thigh/upper leg; children inherit it) plus a small inward turn, arm swing as foreshortening plus a small
+ * sideways turn, and for the punch a uniform scale-up of the punching arm (it comes toward the viewer).
+ *
+ * Bone names are character-relative (`_L` = the character's left), but on screen the character's left is at
+ * +x in the front view and at -x in the back view. Every screen-space quantity (root x, torso lean, outward
+ * limb rotation) is therefore multiplied by `side` (+1 front, -1 back); everything else is shared.
+ */
+
+type Side = 'L' | 'R';
+type View = { prefix: RigTemplateId; side: ViewSide };
+
+/** Positive half-wave: the lift of the left leg (phase 0..0.5) or, half a cycle later, the right leg. */
+const liftOf = (s: Side) => (p: number) => Math.max(0, Math.sin(TAU * p + (s === 'L' ? 0 : Math.PI)));
+
+/** Screen x (or clockwise lean of an up-pointing bone) toward the character's side `s` by `v`. */
+const toward = (side: ViewSide, s: Side, v: number) => (s === 'L' ? side : -side) * v;
+
+function frontalLocomotion(
+  side: ViewSide,
+  length: number,
+  steps: number,
+  o: { lift: number; turn: number; arm: number; armTurn: number; bob: number; shift: number; lean: number; elbow?: number },
+): Tracks {
+  const c = (fn: (p: number) => number) => cycle(length, steps, fn);
+  const tracks: Tracks = {
+    hip: {
+      // lowest at double support (phase 0 and 0.5), highest while a leg passes
+      y: c((p) => o.bob * Math.cos(2 * TAU * p)),
+      // weight over the stance leg: while the left leg is lifted the hip moves toward the right leg
+      x: c((p) => toward(side, 'R', o.shift * Math.sin(TAU * p))),
+    },
+    torso: { rotation: c((p) => toward(side, 'R', o.lean * Math.sin(TAU * p))) },
+    head: { rotation: c((p) => -toward(side, 'R', 0.5 * o.lean * Math.sin(TAU * p))) },
+  };
+  for (const s of ['L', 'R'] as const) {
+    const lift = liftOf(s);
+    // the opposite arm swings forward while this leg lifts; the own arm swings back (foreshortened less)
+    const forward = liftOf(s === 'L' ? 'R' : 'L');
+    tracks[`thigh_${s}`] = {
+      scaleX: c((p) => 1 - o.lift * lift(p)),
+      rotation: c((p) => -outward(side, s, o.turn * lift(p))),
+    };
+    tracks[`upperArm_${s}`] = {
+      scaleX: c((p) => 1 - o.arm * forward(p) - 0.5 * o.arm * lift(p)),
+      rotation: c((p) => -outward(side, s, o.armTurn * forward(p))),
+    };
+    const elbow = o.elbow;
+    if (elbow !== undefined) tracks[`lowerArm_${s}`] = { scaleX: c(() => elbow) };
+  }
+  return tracks;
+}
+
+/** One track per side, for bones named `${stem}_L` / `${stem}_R`. */
+function bothSides(stem: string, fn: (s: Side) => Partial<Record<Channel, Keyframe[]>>): Tracks {
+  return { [`${stem}_L`]: fn('L'), [`${stem}_R`]: fn('R') };
+}
+
+function humanoidViewSet({ prefix, side }: View): AnimationTemplate[] {
+  const base = { rigTemplateId: prefix, fps: 12 };
+  const out = (s: Side, deg: number) => outward(side, s, deg);
+  const tw = (s: Side, v: number) => toward(side, s, v);
+  const [windUp, strike] = side === 1 ? [0.92, 1.2] : [1.05, 0.85];
+  const punchScale: [number, number][] = [[0, 1], [2, windUp], [4, strike], [6, strike], [9, 1]];
+  return [
+    {
+      ...base,
+      id: `${prefix}-idle`,
+      name: 'idle',
+      length: 24,
+      loop: true,
+      tracks: {
+        hip: {
+          y: cycle(24, 4, (p) => -Math.sin(TAU * p)),
+          x: cycle(24, 4, (p) => tw('L', 0.5 * Math.sin(TAU * p))),
+        },
+        torso: { rotation: cycle(24, 4, (p) => tw('L', 1.5 * Math.sin(TAU * p))) },
+        head: { rotation: cycle(24, 4, (p) => -tw('L', Math.sin(TAU * p))) },
+        // breathing: the arms move slightly outward
+        ...bothSides('upperArm', (s) => ({
+          rotation: cycle(24, 4, (p) => out(s, 1.5 * Math.max(0, Math.sin(TAU * p)))),
+        })),
+      },
+    },
+    {
+      ...base,
+      id: `${prefix}-walk`,
+      name: 'walk',
+      length: 16,
+      loop: true,
+      tracks: frontalLocomotion(side, 16, 8, { lift: 0.12, turn: 2, arm: 0.06, armTurn: 3, bob: 1, shift: 1.5, lean: 1.5 }),
+    },
+    {
+      ...base,
+      id: `${prefix}-run`,
+      name: 'run',
+      length: 12,
+      loop: true,
+      tracks: frontalLocomotion(side, 12, 6, {
+        lift: 0.22,
+        turn: 4,
+        arm: 0.12,
+        armTurn: 8,
+        bob: 2.5,
+        shift: 2.5,
+        lean: 3,
+        elbow: 0.8,
+      }),
+    },
+    // Frames: 0 stand, 3 crouch, 6 take-off (arms up and out), 9 apex, 12 landing, 15 settle.
+    {
+      ...base,
+      id: `${prefix}-jump`,
+      name: 'jump',
+      length: 16,
+      loop: false,
+      tracks: {
+        hip: { y: keys([[0, 0], [3, 10], [6, -4], [9, -22], [12, 8], [15, 0]]) },
+        torso: { scaleX: keys([[0, 1], [3, 0.95], [6, 1], [9, 1], [12, 0.96], [15, 1]]) },
+        // knees come toward the viewer (foreshortened legs) and spread a little
+        ...bothSides('thigh', (s) => ({
+          scaleX: keys([[0, 1], [3, 0.8], [6, 1], [9, 0.85], [12, 0.84], [15, 1]]),
+          rotation: keys([[0, 0], [3, out(s, 6)], [6, 0], [9, out(s, 4)], [12, out(s, 5)], [15, 0]]),
+        })),
+        ...bothSides('upperArm', (s) => ({
+          rotation: keys([[0, 0], [3, out(s, 10)], [6, out(s, 110)], [9, out(s, 60)], [12, out(s, 25)], [15, 0]]),
+        })),
+        ...bothSides('lowerArm', (s) => ({
+          rotation: keys([[0, 0], [3, 0], [6, out(s, 15)], [9, out(s, 10)], [12, 0], [15, 0]]),
+        })),
+      },
+    },
+    // Frames: 0 rest, 2 wind-up/guard, 4 strike (right arm forward), 6 hold, 9 back to rest.
+    {
+      ...base,
+      id: `${prefix}-punch`,
+      name: 'punch',
+      length: 10,
+      loop: false,
+      tracks: {
+        hip: { x: keys([[0, 0], [2, tw('L', 1)], [4, tw('R', 2)], [6, tw('R', 2)], [9, 0]]) },
+        torso: { rotation: keys([[0, 0], [2, tw('R', 3)], [4, tw('L', 5)], [6, tw('L', 5)], [9, 0]]) },
+        head: { rotation: keys([[0, 0], [2, 0], [4, tw('R', 3)], [6, tw('R', 3)], [9, 0]]) },
+        // Uniform scale = perspective (and keeps the bent forearm free of shear). The punch goes forward:
+        // toward the viewer in the front view (bigger), away from the viewer in the back view (smaller).
+        upperArm_R: {
+          rotation: keys([[0, 0], [2, out('R', 10)], [4, 0], [6, 0], [9, 0]]),
+          scaleX: keys(punchScale),
+          scaleY: keys(punchScale),
+        },
+        lowerArm_R: { rotation: keys([[0, 0], [2, out('R', -140)], [4, out('R', -120)], [6, out('R', -120)], [9, 0]]) },
+        // guard: fist up in front of the chin
+        upperArm_L: { rotation: keys([[0, 0], [2, out('L', 10)], [4, out('L', 10)], [6, out('L', 10)], [9, 0]]) },
+        lowerArm_L: { rotation: keys([[0, 0], [2, out('L', -140)], [4, out('L', -140)], [6, out('L', -140)], [9, 0]]) },
+      },
+    },
+  ];
+}
+
+function quadrupedViewSet({ prefix, side }: View): AnimationTemplate[] {
+  const base = { rigTemplateId: prefix, fps: 12 };
+  const c = (fn: (p: number) => number) => cycle(16, 8, fn);
+  const tw = (s: Side, v: number) => toward(side, s, v);
+  // Diagonal pairs lift together: frontL + backR (phase 0..0.5), frontR + backL (phase 0.5..1).
+  // `phase` names the front leg of the pair; `s` is the side of the bone itself (for the outward turn).
+  const leg = (phase: Side, s: Side) => ({
+    scaleX: c((p) => 1 - 0.15 * liftOf(phase)(p)),
+    rotation: c((p) => -outward(side, s, 2 * liftOf(phase)(p))),
+  });
+  return [
+    {
+      ...base,
+      id: `${prefix}-idle`,
+      name: 'idle',
+      length: 24,
+      loop: true,
+      tracks: {
+        body: { y: cycle(24, 4, (p) => -Math.sin(TAU * p)) },
+        neck: { rotation: cycle(24, 4, (p) => tw('L', 2 * Math.sin(TAU * p))) },
+        head: { rotation: cycle(24, 4, (p) => -tw('L', 3 * Math.sin(TAU * p))) },
+        tail1: { rotation: cycle(24, 4, (p) => 8 * Math.sin(TAU * p)) },
+        tail2: { rotation: cycle(24, 4, (p) => 10 * Math.sin(TAU * p - 1)) },
+      },
+    },
+    {
+      ...base,
+      id: `${prefix}-walk`,
+      name: 'walk',
+      length: 16,
+      loop: true,
+      tracks: {
+        body: {
+          y: c((p) => Math.cos(2 * TAU * p)),
+          // weight moves toward the right front leg while the left front leg is lifted
+          x: c((p) => tw('R', Math.sin(TAU * p))),
+        },
+        neck: { rotation: c((p) => tw('R', 2 * Math.sin(TAU * p))) },
+        head: { rotation: c((p) => -tw('R', 2 * Math.sin(TAU * p))) },
+        tail1: { rotation: c((p) => 8 * Math.sin(TAU * p)) },
+        tail2: { rotation: c((p) => 10 * Math.sin(TAU * p - 1)) },
+        frontUpper_L: leg('L', 'L'),
+        backUpper_R: leg('L', 'R'),
+        frontUpper_R: leg('R', 'R'),
+        backUpper_L: leg('R', 'L'),
+      },
+    },
+  ];
+}
+
 export const ANIMATION_TEMPLATES: AnimationTemplate[] = [
   humanoidIdle,
   humanoidWalk,
@@ -191,6 +404,10 @@ export const ANIMATION_TEMPLATES: AnimationTemplate[] = [
   humanoidPunch,
   quadrupedIdle,
   quadrupedWalk,
+  ...humanoidViewSet({ prefix: 'humanoid-front', side: 1 }),
+  ...humanoidViewSet({ prefix: 'humanoid-back', side: -1 }),
+  ...quadrupedViewSet({ prefix: 'quadruped-front', side: 1 }),
+  ...quadrupedViewSet({ prefix: 'quadruped-back', side: -1 }),
 ];
 
 /**

@@ -8,7 +8,7 @@ export async function newHumanoid(page: Page): Promise<void> {
   page.on('dialog', (d) => void d.accept());
   await page.goto('/');
   await page.getByRole('button', { name: 'Neu', exact: true }).click();
-  await page.getByRole('button', { name: 'Humanoid' }).click();
+  await page.getByRole('button', { name: 'Humanoid', exact: true }).click();
 }
 
 /** New humanoid project with the head and torso fixtures uploaded. */
