@@ -214,6 +214,34 @@ describe('startShell: Bereichswechsel', () => {
     expect(container('rigsprite').hidden).toBe(false);
   });
 
+  it('neuestes Projekt der Art unlesbar: nimmt das nächste lesbare', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await tick(2);
+    const rOk = await store.create('rigsprite', 'R ok', { kind: 'rigsprite', v: 2 });
+    await tick(2);
+    const rBad = await store.create('rigsprite', 'R kaputt', { kind: 'klexel', v: 99 }); // falsche Art = unlesbar
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    expect((await store.list()).find(m => m.kind === 'rigsprite')!.id).toBe(rBad.id);
+    await shell.switchArea('rigsprite');
+    expect(R.opened).toEqual([{ kind: 'rigsprite', v: 2 }]);
+    expect(await store.lastOpened()).toBe(rOk.id);
+    expect(container('rigsprite').hidden).toBe(false);
+    expect((await store.list())).toHaveLength(3);
+  });
+
+  it('kein Projekt der Art lesbar: legt ein leeres an', async () => {
+    const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
+    await store.create('rigsprite', 'R kaputt', { kind: 'klexel', v: 99 });
+    await store.setLastOpened(k.id);
+    const shell = await startShell(app, descriptors(), { backend: kv });
+    await shell.switchArea('rigsprite');
+    expect(R.opened).toEqual([{ kind: 'rigsprite', v: 0 }]);
+    const metas = await store.list();
+    expect(metas).toHaveLength(3);
+    expect(await store.lastOpened()).toBe(metas.find(m => m.kind === 'rigsprite' && m.name !== 'R kaputt')!.id);
+  });
+
   it('gleicher Bereich: nichts passiert', async () => {
     const k = await store.create('klexel', 'K', { kind: 'klexel', v: 1 });
     await store.setLastOpened(k.id);

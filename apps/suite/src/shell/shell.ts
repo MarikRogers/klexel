@@ -10,7 +10,7 @@ import type {
 import { WorkspaceStore, IdbBackend, migrateLegacy, DEFAULT_AUTOSAVE_DELAY_MS } from '@suite/shared';
 import { showToast, pixelsToDataUrl } from '@suite/shared/ui';
 import { createAutosave } from './autosave';
-import { nextUntitledName, afterRemoveError, isOpenable, latestOfKind, NEW_PROJECT_SIZE } from './listModel';
+import { nextUntitledName, afterRemoveError, isOpenable, newestOfKind, NEW_PROJECT_SIZE } from './listModel';
 import { createProjectList } from './projectList';
 import { createFileActions } from './fileMenu';
 
@@ -364,8 +364,11 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     autosave.schedule(); // Vorschau erzeugen
   }
 
-  /** Wechsel zum Projekt id (nur innerhalb der Warteschlange): erst sichern, dann laden und öffnen. */
-  async function openProjectQueued(id: string): Promise<void> {
+  /**
+   * Wechsel zum Projekt id (nur innerhalb der Warteschlange): erst sichern, dann laden und öffnen.
+   * preloaded = bereits gelesener und geprüfter Inhalt (Bereichswechsel), sonst wird nach dem Sichern gelesen.
+   */
+  async function openProjectQueued(id: string, preloaded?: unknown): Promise<void> {
     if (id === currentId) return;
     const meta = (await store.list()).find(m => m.id === id);
     const d = meta && byKind(meta.kind);
@@ -377,7 +380,7 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
       showToast('Speichern fehlgeschlagen – Projekt nicht gewechselt', 3000);
       throw new Error('Wechsel abgebrochen');
     }
-    const payload = d.decode(await store.load(id));
+    const payload = preloaded ?? d.decode(await store.load(id));
     if (payload === null) {
       showToast('Projekt ist nicht lesbar', 3000);
       throw new Error(`Projekt ${id} nicht lesbar`);
@@ -406,15 +409,22 @@ export async function startShell(app: HTMLElement, descriptors: readonly AreaDes
     return enqueue(() => newProjectQueued(kind, init, content)).catch(err => console.error(err));
   }
 
-  // Bereichswechsel (Umschalter in der Projektliste): zuletzt geändertes Projekt der Art, sonst ein leeres;
-  // gleiche Warteschlange und Sicherung wie beim Öffnen/Anlegen
+  // Bereichswechsel (Umschalter in der Projektliste): zuletzt geändertes LESBARE Projekt der Art (unlesbare werden
+  // übersprungen), sonst ein leeres; gleiche Warteschlange und Sicherung wie beim Öffnen/Anlegen
   function switchArea(kind: string): Promise<void> {
-    return enqueue(async () => {
-      if (kind === currentKind || !byKind(kind)) return;
-      const target = latestOfKind(await store.list(), kind);
-      if (target) await openProjectQueued(target.id);
-      else await newProjectQueued(kind, BLANK);
-    });
+    return enqueue(() => switchAreaQueued(kind));
+  }
+
+  async function switchAreaQueued(kind: string): Promise<void> {
+    const d = byKind(kind);
+    if (kind === currentKind || !d) return;
+    for (const m of newestOfKind(await store.list(), kind)) {
+      let payload: unknown = null;
+      try { payload = d.decode(await store.load(m.id)); } catch (err) { console.error(err); }
+      if (payload !== null) { await openProjectQueued(m.id, payload); return; }
+      console.error(`Projekt ${m.id} ist nicht lesbar und wird beim Bereichswechsel übersprungen`);
+    }
+    await newProjectQueued(kind, BLANK);
   }
 
   function removeProject(id: string): Promise<void> {

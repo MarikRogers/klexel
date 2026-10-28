@@ -84,11 +84,17 @@ export function defaultNewKind(current: string | null, enabledKinds: readonly st
   return current !== null && enabledKinds.includes(current) ? current : enabledKinds[0];
 }
 
-/** Zuletzt geändertes Projekt der Art (Ziel des Bereichswechsels), sonst undefined. */
+/**
+ * Projekte der Art, zuletzt geändertes zuerst (bei gleicher Zeit in Listenreihenfolge): Ziele des Bereichswechsels
+ * in der Reihenfolge, in der sie versucht werden (unlesbare überspringt die Hülle).
+ */
+export function newestOfKind(list: readonly ProjectMeta[], kind: string): ProjectMeta[] {
+  return list.filter(m => m.kind === kind).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Zuletzt geändertes Projekt der Art, sonst undefined. */
 export function latestOfKind(list: readonly ProjectMeta[], kind: string): ProjectMeta | undefined {
-  let best: ProjectMeta | undefined;
-  for (const m of list) if (m.kind === kind && (!best || m.updatedAt > best.updatedAt)) best = m;
-  return best;
+  return newestOfKind(list, kind)[0];
 }
 
 /** Segmente des Bereichswechsels oben in der Projektliste; null bei nur einem Bereich (dann kein Umschalter). */

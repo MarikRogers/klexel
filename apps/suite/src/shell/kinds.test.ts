@@ -2,7 +2,7 @@
 // Projekt-Arten in der Liste: Bereichswechsel (Umschalter oben) und Projekte von Arten ohne Bereich.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProjectMeta } from '@suite/shared';
-import { areaSegments, latestOfKind } from './listModel';
+import { areaSegments, latestOfKind, newestOfKind } from './listModel';
 import { createProjectList, type ProjectListDeps } from './projectList';
 
 const meta = (id: string, kind: string, updatedAt: number): ProjectMeta => ({ id, kind: kind as ProjectMeta['kind'], name: id, updatedAt });
@@ -16,6 +16,12 @@ describe('latestOfKind', () => {
   it('ohne Projekt der Art: undefined', () => {
     expect(latestOfKind([meta('k1', 'klexel', 1)], 'rigsprite')).toBeUndefined();
     expect(latestOfKind([], 'klexel')).toBeUndefined();
+  });
+  it('newestOfKind: alle Projekte der Art, neuestes zuerst, Gleichstand in Listenreihenfolge', () => {
+    const list = [meta('r1', 'rigsprite', 10), meta('k1', 'klexel', 50), meta('r2', 'rigsprite', 30), meta('r3', 'rigsprite', 30)];
+    expect(newestOfKind(list, 'rigsprite').map(m => m.id)).toEqual(['r2', 'r3', 'r1']);
+    expect(newestOfKind(list, 'klexel').map(m => m.id)).toEqual(['k1']);
+    expect(newestOfKind([], 'klexel')).toEqual([]);
   });
 });
 
