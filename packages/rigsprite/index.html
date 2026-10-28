@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <title>RigSprite</title>
+    <style>html, body { margin: 0; background: #1e1f24; }</style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Styles von Rigsprite gelten nur unterhalb von .area-rigsprite (siehe src/ui/app.css) -->
+    <div id="root" class="area-rigsprite"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

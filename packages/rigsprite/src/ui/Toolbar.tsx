@@ -56,7 +56,7 @@ export function Toolbar() {
       <img className="tb-logo" src={suite?.logoUrl ?? `${import.meta.env.BASE_URL}logo.png`} alt="RigSprite" width={24} height={24} />
       <div className="tb-group">
         {suite && (
-          <button onClick={() => suite.openProjects()} title="Projekte">
+          <button className="tb-projects" onClick={() => suite.openProjects()} title="Projekte">
             Projekte
           </button>
         )}

@@ -1,3 +1,3 @@
 /* Kurzmeldung (showToast); gemeinsam für Hülle und Bereiche */
-.toast { position:fixed; left:50%; bottom:calc(120px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(0,0,0,.85); color:var(--fg); padding:8px 14px; border-radius:10px; font-size:14px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; max-width:90vw; text-align:center; }
+.toast { position:fixed; left:50%; bottom:calc(120px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(0,0,0,.85); color:var(--shell-fg, #eee); padding:8px 14px; border-radius:10px; font-size:14px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; max-width:90vw; text-align:center; }
 .toast.show { opacity:1; }

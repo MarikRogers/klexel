@@ -53,6 +53,8 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
     newProject: (project) => host.requestNewProject(undefined, project),
     logoUrl,
   };
+  // Styles von Rigsprite gelten nur unterhalb dieser Klasse (app.css)
+  root.classList.add('area-rigsprite');
   const reactRoot = createRoot(root);
   reactRoot.render(<AppView suite={suite} />);
 

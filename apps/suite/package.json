@@ -16,5 +16,8 @@
     "@suite/klexel": "*",
     "@suite/rigsprite": "*",
     "@suite/shared": "*"
+  },
+  "devDependencies": {
+    "lightningcss": "^1.33.0"
   }
 }

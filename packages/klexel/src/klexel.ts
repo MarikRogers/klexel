@@ -46,6 +46,8 @@ type ShapeTool = 'line' | 'rect' | 'ellipse';
  */
 export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<SavedState> {
   const app = root;
+  // Styles von Klexel gelten nur unterhalb dieser Klasse (style.css)
+  app.classList.add('area-klexel');
   // Globale Listener (document/window): nur wirksam, solange der Bereich aktiv ist; destroy() meldet sie ab
   let active = true;
   const isActive = () => active && host.isActive();

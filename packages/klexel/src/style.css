@@ -1,7 +1,11 @@
-:root { --bg:#16161c; --panel:#22222b; --fg:#eee; --accent:#4da3ff; }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
-html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--fg); font:16px system-ui,sans-serif; overscroll-behavior:none; }
-#app { display:flex; flex-direction:column; height:100dvh; padding-top:env(safe-area-inset-top); }
+/* Klexel: alle Regeln gelten nur in der Wurzel des Bereichs (#app.area-klexel, Klasse setzt mountKlexel).
+   Frühere html/body/:root/*-Regeln liegen auf der Wurzel selbst; die Hülle setzt nur einen neutralen Rahmen.
+   Dialoge und Fenster hängt Klexel in #app ein, damit sie diese Regeln behalten (auch in der Top-Layer). */
+.area-klexel {
+  --bg:#16161c; --panel:#22222b; --fg:#eee; --accent:#4da3ff;
+  margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:16px system-ui,sans-serif; overscroll-behavior:none;
+  display:flex; flex-direction:column; height:100dvh; padding-top:env(safe-area-inset-top);
+&, & * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
 #top, #bottom { background:var(--panel); display:flex; gap:6px; padding:6px 8px; align-items:center; }
 #top { justify-content:space-between; flex-wrap:wrap; }
 /* Marke: Zeile 1 links neben den Datei-Buttons, darunter die Bearbeiten-Buttons */
@@ -22,11 +26,11 @@ button.active { border-color:var(--accent); }
 .swatch { height:36px; min-width:0; padding:0; border:2px solid #0006; }
 .swatch.active { border-color:#fff; outline:2px solid var(--accent); }
 #toggle { position:absolute; top:8px; left:8px; z-index:2; min-width:40px; min-height:40px; padding:0; opacity:.75; background:#22222bcc; }
-#app.collapsed #top, #app.collapsed #bottom { display:none; }
+&.collapsed #top, &.collapsed #bottom { display:none; }
 
 /* Querformat: Aktionen links, Werkzeuge + Farben rechts, Zeichenfläche in der Mitte */
 @media (orientation: landscape) {
-  #app { flex-direction:row; padding-top:0; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+  & { flex-direction:row; padding-top:0; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
   #top { flex-direction:column; flex-wrap:nowrap; align-items:flex-start; justify-content:flex-start; width:104px; padding:6px; overflow-y:auto; }
   .brand { flex:none; order:0; font-size:17px; }
   #top .row-file, #top .row-edit { order:0; flex:none; }
@@ -151,7 +155,7 @@ dialog input[type=number] { width:5em; font-size:18px; }
   #selbar button { padding:0; width:40px; }
   #selbar .selbar-commit { flex-direction:column; gap:0; font-size:10px; min-height:48px; }
 }
-#app.collapsed #selbar { padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
+&.collapsed #selbar { padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
 
 /* Dialog "Konsolenexport" */
 #consoleDlg { width:min(94vw, 440px); padding:0; }
@@ -213,3 +217,4 @@ dialog input[type=number] { width:5em; font-size:18px; }
 /* Lupe des Präzisionscursors: oben links in der Zeichenfläche, bei Bedarf rechts (mit #stage canvas überschreiben) */
 #stage canvas.loupe { position:absolute; inset:auto; top:56px; left:10px; width:108px; height:108px; z-index:1; border:2px solid var(--accent); border-radius:10px; background:#000; pointer-events:none; box-sizing:content-box; }
 #stage canvas.loupe.right { left:auto; right:10px; }
+}

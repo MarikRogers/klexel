@@ -1,5 +1,10 @@
-* { box-sizing: border-box; }
-body { margin: 0; font: 13px system-ui, sans-serif; background: #1e1f24; color: #e6e6e6; }
+/* Rigsprite: alle Regeln gelten nur in der Wurzel des Bereichs (.area-rigsprite: #area-rigsprite in der Suite,
+   #root in der eigenständigen Seite). Die frühere body-Regel liegt auf der Wurzel, die dazu den Bildschirm füllt
+   (.app ist ohnehin position:fixed); so wirkt nichts auf andere Bereiche oder die Hülle. */
+.area-rigsprite {
+  position: fixed; inset: 0;
+  margin: 0; font: 13px system-ui, sans-serif; background: #1e1f24; color: #e6e6e6;
+&, & * { box-sizing: border-box; }
 .app {
   position: fixed; inset: 0; display: grid;
   grid-template-columns: 220px 1fr 240px; grid-template-rows: 40px 1fr 160px;
@@ -108,4 +113,5 @@ button[aria-pressed="true"] { background: #4a6fa5; }
   .tl-key::before { content: ""; position: absolute; left: calc((var(--cell) - 10px) / 2); top: 13px; width: 10px; height: 10px; background: #e6c15a; transform: rotate(45deg) scale(0.8); }
   .tl-key.selected { background: transparent; outline: none; }
   .tl-key.selected::before { background: #fff; outline: 1px solid #4a9eff; }
+}
 }

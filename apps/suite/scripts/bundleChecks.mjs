@@ -9,10 +9,12 @@ export const MARKERS = {
 
 /**
  * Weitere Spuren eines Bereichs, die in Builds ohne ihn fehlen müssen (nur Abwesenheit wird geprüft):
- * Rigsprite bringt React (interner Name in react-dom) und seine Styles (.orbit-panel aus app.css) mit.
+ * Rigsprite bringt React (interner Name in react-dom) und seine Styles (.orbit-panel aus app.css, im Bundle als
+ * `.area-rigsprite .orbit-panel`) mit, Klexel seine Styles (.selbar-row aus style.css, `.area-klexel .selbar-row`).
+ * Die Hülle nennt beide Wurzel-Klassen selbst (Platzierung des Projekte-Knopfs); die sind daher keine Spur.
  */
 export const TRACES = {
-  klexel: [],
+  klexel: ['.selbar-row'],
   rigsprite: ['__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED', '.orbit-panel'],
 };
 

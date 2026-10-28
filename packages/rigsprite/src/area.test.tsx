@@ -58,6 +58,12 @@ describe('rigspriteArea', () => {
     expect(host.openProjects).toHaveBeenCalledTimes(1);
   });
 
+  it('Wurzel trägt die Bereichs-Klasse (Styles gelten nur darin); Knopf „Projekte" hat eine eigene Klasse', () => {
+    expect(root.classList.contains('area-rigsprite')).toBe(true);
+    const btn = [...root.querySelectorAll('button')].find((b) => b.textContent === 'Projekte')!;
+    expect(btn.classList.contains('tb-projects')).toBe(true);
+  });
+
   it('open setzt den Store, leert den Undo-Verlauf und meldet keine Änderung', () => {
     const p = createProject('quadruped', 'Hund');
     act(() => useEditor.getState().setProjectName('vorher'));
