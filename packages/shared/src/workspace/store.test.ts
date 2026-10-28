@@ -134,11 +134,12 @@ describe('WorkspaceStore', () => {
 
   it('create und duplicate liegen vorn, auch wenn der Index schon höhere Zeitstempel hat', async () => {
     const kv = new MemoryBackend();
-    kv.data.set('ws:index', [{ id: 'alt', kind: 'klexel', name: 'Alt', updatedAt: Date.now() + 100000 }]);
+    const future = Date.now() + 100000; // einmal festhalten: sonst wandert die Schwelle mit der Uhr (unzuverlässig)
+    kv.data.set('ws:index', [{ id: 'alt', kind: 'klexel', name: 'Alt', updatedAt: future }]);
     kv.data.set('ws:p:alt', 1);
     const ws = new WorkspaceStore(kv);
     const n = await ws.create('klexel', 'Neu', 2);
-    expect(n.updatedAt).toBeGreaterThan(Date.now() + 100000);
+    expect(n.updatedAt).toBeGreaterThan(future);
     const d = await ws.duplicate('alt');
     expect(d.updatedAt).toBeGreaterThan(n.updatedAt);
     expect((await ws.list()).map(m => m.name)).toEqual(['Alt (Kopie)', 'Neu', 'Alt']);
