@@ -1,5 +1,4 @@
 import { PixelDocument } from '../model/Document';
-import { serializeState, parseState } from './state';
 
 const DB = 'pixelart', STORE = 'kv';
 
@@ -30,20 +29,6 @@ async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
     req.onsuccess = () => res(req.result);
     req.onerror = () => rej(req.error);
   });
-}
-
-export async function saveState(doc: PixelDocument, palette: number[], color: number): Promise<void> {
-  const db = await open();
-  // Kein await zwischen Serialisieren und put: put klont synchron, das ist die einzige Kopie
-  const req = db.transaction(STORE, 'readwrite').objectStore(STORE).put(serializeState(doc, palette, color, { copy: false }), 'current');
-  await new Promise<void>((res, rej) => {
-    req.onsuccess = () => res();
-    req.onerror = () => rej(req.error);
-  });
-}
-
-export async function loadState(): Promise<{ doc: PixelDocument; palette: number[]; color: number } | null> {
-  try { return parseState(await kv<unknown>('readonly', st => st.get('current'))); } catch { return null; }
 }
 
 // Roher Alt-Eintrag für die Übernahme in den Workspace; wird nur gelesen

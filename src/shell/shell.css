@@ -1,0 +1,52 @@
+/* Hülle: Knopf „Projekte" in Klexels Kopfleiste und die Projektliste. Nur eigene IDs/Klassen (pl-*). */
+#projectsBtn { order:1; flex:none; padding:0; }
+@media (orientation: landscape) {
+  #projectsBtn { order:0; }
+}
+/* Schmales Hochformat: Marke nur als Symbol, damit Marke, Projekte und Datei-Knöpfe in eine Zeile passen
+   (sonst bricht die Kopfleiste in drei Zeilen um und die Zeichenfläche wird kleiner) */
+@media (orientation: portrait) and (max-width: 419px) {
+  #top .brand span { display:none; }
+}
+/* Während eines Wechsels keine Eingaben auf der Zeichenfläche */
+body.shell-busy #app { pointer-events:none; }
+
+#projectsDlg { width:min(96vw, 560px); max-width:none; height:min(88dvh, 720px); padding:0; overflow:hidden; }
+#projectsDlg::backdrop, .pl-ask::backdrop { background:rgba(0,0,0,.6); }
+#projectsDlg .pl { display:flex; flex-direction:column; height:100%; padding:12px; gap:10px; }
+#projectsDlg.busy .pl-items, #projectsDlg.busy .pl-tools { opacity:.6; pointer-events:none; }
+.pl-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pl-head h2 { margin:0; font-size:20px; }
+.pl-tools { display:flex; gap:8px; flex-wrap:wrap; }
+.pl-search { flex:1 1 160px; min-width:0; min-height:44px; font-size:16px; padding:0 10px; border-radius:10px; border:1px solid #555; background:#1b1b22; color:var(--fg); user-select:text; }
+.pl-tools .pl-new { flex:none; font-size:16px; }
+#projectsDlg button.primary, .pl-ask button.primary { border-color:var(--accent); }
+#projectsDlg button.danger, .pl-ask button.danger { color:#ff8c8c; }
+.pl-ask button.danger { border-color:#ff8c8c; }
+.pl-empty { margin:8px 0; opacity:.8; }
+.pl-items { list-style:none; margin:0; padding:0; overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:8px; }
+.pl-item { display:grid; grid-template-columns:56px 1fr; grid-template-areas:"thumb info" "actions actions"; gap:6px 10px; padding:8px; border-radius:10px; background:#2a2a34; border:2px solid transparent; }
+.pl-item.current { border-color:var(--accent); }
+.pl-item.unavailable .pl-thumb, .pl-item.unavailable .pl-name { opacity:.5; }
+.pl-thumb { grid-area:thumb; width:56px; height:56px; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:repeating-conic-gradient(#3a3a45 0% 25%, #2c2c36 0% 50%) 0 0 / 12px 12px; }
+.pl-thumb img { max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
+.pl-info { grid-area:info; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:2px; }
+.pl-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pl-meta { font-size:13px; opacity:.8; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.pl-badge { font-size:12px; padding:1px 6px; border-radius:6px; background:#33404f; }
+.pl-badge.off { background:#4f3333; }
+.pl-actions { grid-area:actions; display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+.pl-actions button { min-width:0; font-size:14px; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width: 380px) {
+  .pl-actions { grid-template-columns:repeat(2, 1fr); }
+}
+
+.pl-ask { width:min(92vw, 360px); }
+.pl-ask h2 { margin:0 0 8px; font-size:20px; }
+.pl-ask p { line-height:1.4; }
+.pl-ask input[type=text] { width:100%; min-height:44px; font-size:16px; padding:0 10px; border-radius:10px; border:1px solid #555; background:#1b1b22; color:var(--fg); user-select:text; margin-top:4px; }
+.pl-ask input[type=number] { min-height:44px; margin-left:8px; }
+.pl-hint { font-size:14px; opacity:.8; margin:4px 0; }
+.pl-hint.error { color:#ff8c8c; opacity:1; }
+.pl-ask-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+.pl-ask-actions button { font-size:16px; }

@@ -20,6 +20,7 @@ export interface AreaHost {
 /** Steuerung eines eingehängten Bereichs durch die Hülle. */
 export interface AreaHandle<P> {
   open(payload: P): void;
+  /** Aktueller Stand zum Speichern. Vorher flush() aufrufen, sonst fehlt eine schwebende Auswahl. */
   snapshot(): P;
   thumbnail(): string | undefined;
   /** Offene Bearbeitung abschließen und sofort onChange melden */
