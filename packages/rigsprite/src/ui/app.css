@@ -27,6 +27,8 @@
 .row { display: flex; gap: 4px; margin: 4px 0; }
 .field { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; gap: 6px; }
 .field input[type="number"], .field input[type="text"] { width: 110px; }
+.depth-field input[type="range"] { flex: 1; min-width: 0; min-height: 44px; }
+.depth-field input[type="number"] { width: 64px; }
 button { background: #3a3d46; color: inherit; border: 1px solid #555; border-radius: 3px; padding: 3px 8px; cursor: pointer; }
 button:disabled { opacity: 0.4; cursor: default; }
 button[aria-pressed="true"] { background: #4a6fa5; }

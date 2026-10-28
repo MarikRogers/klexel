@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { boneById } from '../core/rig';
 import { isBoneNameTaken, useEditor } from '../state/store';
 import { CommitInput, parseNumber } from './CommitInput';
+import { DepthPanel } from './DepthPanel';
 
 function NumberField({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
   return (
@@ -98,6 +99,7 @@ export function Inspector() {
           <button onClick={() => removePart(part.id)}>Entfernen</button>
         </div>
       )}
+      <DepthPanel />
       {!bone && !part && <p className="hint">Nichts ausgewählt.</p>}
     </section>
   );

@@ -11,6 +11,7 @@ const editor = () => useEditor.getState();
 export function CameraControls() {
   const cameraRotation = useEditor((s) => s.project.settings.cameraRotation);
   const mirrored = useEditor((s) => s.project.settings.mirror);
+  const depthLocked = useEditor((s) => s.project.settings.depthLocked);
   const orbitYaw = useEditor((s) => s.orbit.yaw);
   const orbitPitch = useEditor((s) => s.orbit.pitch);
   return (
@@ -47,6 +48,13 @@ export function CameraControls() {
       </button>
       <button onClick={() => editor().toggleMirror()} aria-pressed={mirrored} title="Ansicht horizontal spiegeln (M)">
         Spiegeln
+      </button>
+      <button
+        onClick={() => editor().setSettings({ depthLocked: !depthLocked })}
+        aria-pressed={depthLocked}
+        title="Kippen, Drehen und Tiefe aller Bones ausschalten (die Werte bleiben erhalten)"
+      >
+        Tiefe sperren
       </button>
       <button
         onClick={() => editor().resetCamera()}
