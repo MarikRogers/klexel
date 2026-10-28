@@ -142,7 +142,7 @@ export async function importWorkspace(
   return { added, rejected };
 }
 
-function cleanName(v: unknown): string {
+export function cleanName(v: unknown): string {
   return (typeof v === 'string' ? v.trim() : '').slice(0, MAX_NAME).trim() || 'Unbenannt';
 }
 

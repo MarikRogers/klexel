@@ -4,7 +4,7 @@ export { WorkspaceStore, newProjectId } from './workspace/store';
 export { MemoryBackend } from './workspace/memoryBackend';
 export { IdbBackend } from './workspace/idbBackend';
 export { migrateLegacy } from './workspace/migrateLegacy';
-export { exportWorkspace, importWorkspace } from './workspace/file';
+export { exportWorkspace, importWorkspace, cleanName } from './workspace/file';
 export type { WorkspaceFile, ImportResult } from './workspace/file';
 export type { Area, AreaHandle, AreaHost, NewProjectInit } from './area';
 export { MAX_IMAGE_SIZE } from './area';

@@ -1,5 +1,5 @@
 import type { WorkspaceStore } from '@suite/shared';
-import { exportWorkspace, importWorkspace } from '@suite/shared';
+import { cleanName, exportWorkspace, importWorkspace } from '@suite/shared';
 import { saveBlob, showToast } from '@suite/shared/ui';
 import { classifyProjectFile } from './classifyProjectFile';
 
@@ -43,12 +43,16 @@ export function createFileActions(deps: FileActionDeps): FileActions {
       showToast('Diese Datei ist ein Rigsprite-Projekt, aber Rigsprite ist in dieser Version nicht enthalten.', 6000);
       return 0;
     }
+    if (typeof raw.version === 'number' && raw.version > 1) {
+      showToast('Die Datei stammt von einer neueren Version.', 5000);
+      return 0;
+    }
     if (!deps.validatePayload('rigsprite', raw)) {
       showToast('Das Rigsprite-Projekt ist beschädigt und konnte nicht geladen werden', 5000);
       return 0;
     }
     try {
-      const name = (typeof raw.name === 'string' ? raw.name.trim() : '').slice(0, 60).trim() || 'Unbenannt';
+      const name = cleanName(raw.name);
       await store.add({ kind: 'rigsprite', name, updatedAt: Date.now() }, raw);
       showToast('Rigsprite-Projekt hinzugefügt', 2500);
       return 1;

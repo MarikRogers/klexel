@@ -57,9 +57,16 @@ describe('importFile: eigenständige Rigsprite-Projektdatei', () => {
     expect(toast()).toBe('Diese Datei ist ein Rigsprite-Projekt, aber Rigsprite ist in dieser Version nicht enthalten.');
   });
 
-  it('beschädigtes Projekt: Fehlermeldung, nichts gespeichert', async () => {
+  it('Projekt einer neueren Version: eigene Meldung, nichts gespeichert', async () => {
     const { store, actions } = setup(true);
     expect(await actions.importFile(file(project({ version: 2 })))).toBe(0);
+    expect(await store.list()).toEqual([]);
+    expect(toast()).toBe('Die Datei stammt von einer neueren Version.');
+  });
+
+  it('beschädigtes Projekt: Fehlermeldung, nichts gespeichert', async () => {
+    const { store, actions } = setup(true);
+    expect(await actions.importFile(file(project({ version: 'x' })))).toBe(0);
     expect(await store.list()).toEqual([]);
     expect(toast()).toMatch(/beschädigt/);
   });

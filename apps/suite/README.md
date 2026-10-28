@@ -20,8 +20,7 @@ npm run deploy -- --areas klexel --dry-run      # nur bauen und prüfen, nichts 
 ein `VITE_AREAS` aus `.env`-Dateien gilt dort nicht. Ein von npm geschlucktes `--dry-run` wird ebenfalls als Probelauf behandelt.
 
 Name, Titel und Manifest richten sich nach der Auswahl (nur Rigsprite → „RigSprite", sonst „Klexel"); der Cache-Name des
-Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v6`); der Service Worker liest nur aus dem
+Service Workers ist je Auswahl verschieden (Standard-Build: `pixelart-v7`, sonst `pixelart-<bereiche>-v7`, z. B. `pixelart-klexel-v7`, `pixelart-rigsprite-v7`); der Service Worker liest nur aus dem
 eigenen Cache und löscht beim Aktivieren alle anderen `pixelart-*`-Caches (fremde Caches bleiben).
 
-**Stand:** Rigsprite ist noch nicht eingebunden. Bis dahin enthält auch der Standard-Build nur Klexel, und ein Build nur
-mit `rigsprite` bricht mit „Rigsprite ist noch nicht eingebunden" ab.
+**Stand:** Klexel und Rigsprite sind beide als Bereiche eingebunden; der Standard-Build enthält beide, ein Build nur mit `klexel` oder nur mit `rigsprite` funktioniert ebenso. Alte Rigsprite-Daten kommen einmalig über „Speichern" (`*.rigsprite.json`) im alten Rigsprite und „Datei laden…" in der Suite hinein.
