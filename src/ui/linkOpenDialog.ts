@@ -1,14 +1,13 @@
 import { PixelDocument } from '../model/Document';
 import type { DecodedImage } from '../share/linkCodec';
-import { docHasContent } from '../photo/hasContent';
 import { exportPng } from '../storage/storage';
 import { saveBlob } from '../export/saveBlob';
 import { drawDecoded } from './drawDecoded';
 import { showToast } from './toast';
 
 export interface LinkOpenDeps {
-  getDoc(): PixelDocument;
-  onApply(doc: PixelDocument): void;
+  /** "In Klexel bearbeiten": das Bild als neues Projekt übernehmen */
+  onApply(image: DecodedImage): void;
   /** Wird bei jedem Schließen des Dialogs aufgerufen (Schaltfläche, Hintergrund, Escape, nach Übernehmen). */
   onClose(): void;
 }
@@ -54,10 +53,9 @@ export function createLinkOpenDialog(deps: LinkOpenDeps): { open(image: DecodedI
   };
   q<HTMLButtonElement>('.lk-edit').onclick = () => {
     if (!current) return;
-    if (docHasContent(deps.getDoc()) && !confirm('Das aktuelle Bild wird ersetzt. Fortfahren?')) return;
-    const d = docFrom(current);
+    const image = current;
     dlg.close();
-    deps.onApply(d);
+    deps.onApply(image);
   };
   q<HTMLButtonElement>('.lk-close').onclick = () => dlg.close();
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
