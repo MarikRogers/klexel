@@ -7,6 +7,7 @@ import {
   type ExportOptions,
 } from '../core/export';
 import { buildFrame, type FrameData } from '../core/frame';
+import { animationFrames, rgbaToPacked } from '../core/animationFrames';
 import { toFrameInput, type Project } from '../core/project';
 import { CANVAS_UNSUPPORTED, errorMessage, NO_ANIMATION_SELECTED } from '../core/messages';
 import { loadImageElement } from '../dom/imageIo';
@@ -39,6 +40,41 @@ function makeRenderer(w: number, h: number): { canvas: HTMLCanvasElement | Offsc
   }
   const canvas = domCanvas(w, h);
   return { canvas, renderer: new SkinRenderer(canvas) };
+}
+
+/** GL-Renderer der Frame-Größe mit allen Bildern des Projekts (gemeinsam für Spritesheet und Rückgabe). */
+async function prepareRenderer(
+  project: Project,
+  fw: number,
+  fh: number,
+): Promise<{ canvas: HTMLCanvasElement | OffscreenCanvas; renderer: SkinRenderer }> {
+  const made = makeRenderer(fw, fh);
+  try {
+    const loaded = await Promise.all(
+      Object.values(project.images).map(async (asset) => [asset.id, await loadImageElement(asset.dataUrl)] as const),
+    );
+    for (const [id, img] of loaded) made.renderer.setImage(id, img, project.settings.pixelArt);
+  } catch (e) {
+    made.renderer.dispose(true);
+    throw e;
+  }
+  return made;
+}
+
+/** Flache Frontansicht des Exports: der Rig-Ursprung liegt auf dem Pivot jeder Zelle. */
+function exportView(project: Project, pivot: { x: number; y: number }, fw: number, fh: number, scale: number) {
+  const { cameraRotation: rotation, mirror } = project.settings;
+  return {
+    x: pivot.x - fw / 2,
+    y: pivot.y - fh / 2,
+    zoom: scale,
+    rotation,
+    yaw: 0,
+    pitch: 0,
+    mirror,
+    width: fw,
+    height: fh,
+  };
 }
 
 async function canvasToPng(c: HTMLCanvasElement | OffscreenCanvas): Promise<Blob> {
@@ -74,24 +110,9 @@ export async function renderSpritesheet(project: Project, opts: ExportOptions): 
     if (!ctx) return { ok: false, error: CANVAS_UNSUPPORTED };
     ctx.imageSmoothingEnabled = !project.settings.pixelArt;
 
-    const { canvas: glCanvas, renderer } = makeRenderer(fw, fh);
+    const { canvas: glCanvas, renderer } = await prepareRenderer(project, fw, fh);
     try {
-      const loaded = await Promise.all(
-        Object.values(project.images).map(async (asset) => [asset.id, await loadImageElement(asset.dataUrl)] as const),
-      );
-      for (const [id, img] of loaded) renderer.setImage(id, img, project.settings.pixelArt);
-
-      const view = {
-        x: pivot.x - fw / 2,
-        y: pivot.y - fh / 2,
-        zoom: scale,
-        rotation,
-        yaw: 0,
-        pitch: 0,
-        mirror,
-        width: fw,
-        height: fh,
-      };
+      const view = exportView(project, pivot, fw, fh, scale);
       for (const cell of layout.cells) {
         const frame = framesPerAnim[cell.animationIndex][cell.frameIndex];
         // Export is always the flat front view: every item on depth 0.
@@ -117,6 +138,54 @@ export async function renderSpritesheet(project: Project, opts: ExportOptions): 
       2,
     );
     return { ok: true, png, json };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+export type AnimationFramesResult =
+  | { ok: true; width: number; height: number; fps: number; name: string; frames: Uint32Array[] }
+  | { ok: false; error: string };
+
+/**
+ * Rendert die Frames from..to (inklusiv, 0-basiert; Standard: alle) einer Animation als Pixel (0xRRGGBBAA, Zeilen
+ * von oben) für die Rückgabe an Klexel: dieselbe Kamera, Grenzen und derselbe Pivot wie der Spritesheet-Export
+ * (Maßstab 1, ohne Padding), einheitliche Größe für alle Frames (animationFrameSize liefert sie vorab).
+ */
+export async function renderAnimationFrames(
+  project: Project,
+  animationId: string,
+  range?: { from: number; to: number },
+): Promise<AnimationFramesResult> {
+  try {
+    const anim = animationFrames(project, animationId);
+    if (!anim) return { ok: false, error: NO_ANIMATION_SELECTED };
+    const from = Math.max(0, range?.from ?? 0);
+    const to = Math.min(anim.frames.length - 1, range?.to ?? anim.frames.length - 1);
+    const { width: fw, height: fh, pivot } = anim;
+
+    // Auslesen über ein 2D-Canvas (getImageData: Zeilen von oben, nicht vormultipliziert) wie beim Zeichnen ins Sheet
+    const read = makeSheetCanvas(fw, fh);
+    const ctx = read.getContext('2d', { willReadFrequently: true }) as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
+    if (!ctx) return { ok: false, error: CANVAS_UNSUPPORTED };
+
+    const { canvas: glCanvas, renderer } = await prepareRenderer(project, fw, fh);
+    const frames: Uint32Array[] = [];
+    try {
+      const view = exportView(project, pivot, fw, fh, 1);
+      for (let i = from; i <= to; i++) {
+        renderer.render(orderLayers(anim.frames[i].items, view, 0), view, null);
+        ctx.clearRect(0, 0, fw, fh);
+        ctx.drawImage(glCanvas as CanvasImageSource, 0, 0);
+        frames.push(rgbaToPacked(ctx.getImageData(0, 0, fw, fh).data, fw, fh));
+      }
+    } finally {
+      renderer.dispose(true);
+    }
+    return { ok: true, width: fw, height: fh, fps: anim.fps, name: anim.name, frames };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

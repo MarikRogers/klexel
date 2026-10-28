@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { SourceService } from '@suite/shared';
+import type { ReturnRequest, ReturnResult, SourceService } from '@suite/shared';
 import type { LinkedSyncSummary } from '../areaLogic';
 import type { Project } from '../core/project';
 
@@ -18,6 +18,10 @@ export interface SuiteBridge {
   sources?: SourceService;
   /** Refreshes all linked images from their sources now ("Aktualisieren"); present together with `sources`. */
   syncSources?(): Promise<LinkedSyncSummary>;
+  /** Creates a NEW Klexel project from rendered frames ("Nach Klexel…"); absent without Klexel in the build. */
+  returnToKlexel?(req: ReturnRequest): Promise<ReturnResult>;
+  /** Opens a workspace project by id (switches away from Rigsprite). */
+  openProject?(id: string): Promise<void>;
 }
 
 export const SuiteContext = createContext<SuiteBridge | null>(null);

@@ -253,3 +253,21 @@ describe('rigspriteArea mit Klexel-Quellen', () => {
     expect(err).toHaveBeenCalled();
   });
 });
+
+describe('rigspriteArea mit Rückgabe an Klexel', () => {
+  it('host.returnToKlexel und openProject kommen in der Oberfläche an („Nach Klexel…" im Export)', () => {
+    act(() => handle?.destroy());
+    const returnToKlexel = vi.fn(async () => ({ projectId: 'k', name: 'walk (aus Rigsprite)' }));
+    act(() => { handle = mountRigsprite(root, { ...host, returnToKlexel, openProject: vi.fn(async () => undefined) }); });
+    const btn = (text: string) => [...root.querySelectorAll('button')].find((b) => b.textContent === text);
+    act(() => btn('Export')!.click());
+    act(() => btn('Nach Klexel…')!.click());
+    expect(root.querySelector('[role="dialog"][aria-label="Nach Klexel"]')).not.toBeNull();
+  });
+
+  it('ohne host.returnToKlexel kein „Nach Klexel…"', () => {
+    const btn = (text: string) => [...root.querySelectorAll('button')].find((b) => b.textContent === text);
+    act(() => btn('Export')!.click());
+    expect(btn('Nach Klexel…')).toBeUndefined();
+  });
+});

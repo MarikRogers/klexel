@@ -4,6 +4,8 @@ import { NO_ANIMATION_SELECTED } from '../core/messages';
 import { renderSpritesheet } from '../render/renderSheet';
 import { useEditor } from '../state/store';
 import { download } from '../dom/download';
+import { ReturnToKlexelDialog } from './ReturnToKlexelDialog';
+import { useSuite } from './suiteBridge';
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   // The list shows only the animations; the full project is read when rendering.
@@ -15,6 +17,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [toKlexel, setToKlexel] = useState(false);
+  // "Nach Klexel…" only when the suite build contains Klexel
+  const canReturn = !!useSuite()?.returnToKlexel;
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -58,6 +63,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  if (toKlexel) return <ReturnToKlexelDialog onClose={onClose} />;
+
   return (
     <div className="dialog-backdrop">
       <div className="dialog" role="dialog" aria-label="Spritesheet exportieren">
@@ -99,6 +106,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         <p>
           <button onClick={preview} disabled={none || busy}>Vorschau</button>{' '}
           <button onClick={exportNow} disabled={none || busy}>Exportieren</button>{' '}
+          {canReturn && (
+            <>
+              <button onClick={() => setToKlexel(true)} disabled={busy}>Nach Klexel…</button>{' '}
+            </>
+          )}
           <button onClick={onClose}>Abbrechen</button>
         </p>
       </div>

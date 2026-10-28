@@ -85,6 +85,8 @@ export function mountRigsprite(root: HTMLElement, host: AreaHost): AreaHandle<Pr
     newProject: (project) => host.requestNewProject(undefined, project),
     logoUrl,
     ...(host.sources ? { sources: host.sources, syncSources: () => syncSources(false) } : {}),
+    ...(host.returnToKlexel ? { returnToKlexel: host.returnToKlexel.bind(host) } : {}),
+    ...(host.openProject ? { openProject: host.openProject.bind(host) } : {}),
   };
   // Styles von Rigsprite gelten nur unterhalb dieser Klasse (app.css)
   root.classList.add('area-rigsprite');
