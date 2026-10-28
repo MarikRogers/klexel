@@ -3,8 +3,11 @@ import { MAX_FPS, MIN_ANIMATION_LENGTH, MIN_FPS } from './defaults';
 import { clamp } from './math';
 import type { BoneOffset, Pose } from './rig';
 
-export type Channel = 'rotation' | 'x' | 'y' | 'scaleX' | 'scaleY';
-export const CHANNELS: Channel[] = ['rotation', 'x', 'y', 'scaleX', 'scaleY'];
+export type Channel = 'rotation' | 'x' | 'y' | 'scaleX' | 'scaleY' | 'tilt' | 'turn' | 'depth';
+export const CHANNELS: Channel[] = ['rotation', 'x', 'y', 'scaleX', 'scaleY', 'tilt', 'turn', 'depth'];
+
+/** The channels that move a bone in depth (spec: Bewegung in der Tiefe). */
+export const DEPTH_CHANNELS: readonly Channel[] = ['tilt', 'turn', 'depth'];
 
 export const EASINGS = ['linear', 'step', 'easeInOut'] as const;
 export type Easing = (typeof EASINGS)[number];

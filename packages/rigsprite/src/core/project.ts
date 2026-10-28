@@ -1,4 +1,4 @@
-import { CHANNELS, EASINGS, type Animation, type BoneTrack, type Easing, type Keyframe } from './animation';
+import { CHANNELS, DEPTH_CHANNELS, EASINGS, type Animation, type BoneTrack, type Easing, type Keyframe } from './animation';
 import { DEFAULT_PROJECT_NAME, DEFAULT_SETTINGS, MIN_SOFTNESS } from './defaults';
 import type { FrameInput } from './frame';
 import type { ImageAsset, ImageSource, Part, SpriteAxis } from './part';
@@ -17,6 +17,8 @@ export interface ProjectSettings {
   cameraRotation: number;
   /** Mirror at the vertical axis (before the roll); applied to view and export. */
   mirror: boolean;
+  /** Tilt, turn and depth of all bones are ignored (the keys stay); applied to view and export. */
+  depthLocked: boolean;
 }
 
 export interface Project {
@@ -56,8 +58,19 @@ export function createProject(rigTemplateId: RigTemplateId, name = DEFAULT_PROJE
   };
 }
 
+/** True if any animation has a key in a depth channel (tilt, turn, depth). */
+export function usesDepthChannels(p: Project): boolean {
+  return p.animations.some((a) =>
+    Object.values(a.tracks).some((t) => DEPTH_CHANNELS.some((c) => (t[c]?.length ?? 0) > 0)),
+  );
+}
+
+/**
+ * The file text. Projects with depth keys are written as version 2, so an older app refuses them with the
+ * "unsupported version" message instead of silently dropping the keys; all others stay version 1.
+ */
 export function serializeProject(p: Project): string {
-  return JSON.stringify(p);
+  return JSON.stringify(usesDepthChannels(p) ? { ...p, version: 2 } : p);
 }
 
 type Obj = Record<string, unknown>;
@@ -242,6 +255,9 @@ function parseSettings(raw: unknown): ProjectSettings {
   if (s.mirror !== undefined && !isBool(s.mirror)) {
     fail('Ungültige Spiegelung in den Einstellungen.');
   }
+  if (s.depthLocked !== undefined && !isBool(s.depthLocked)) {
+    fail('Ungültige Sperre der Tiefe in den Einstellungen.');
+  }
   // Old files stored a horizontal camera rotation (`cameraYaw`) instead: beyond ±90° it was mirrored.
   const legacyMirror = isNum(s.cameraYaw) ? Math.abs(normalizeCameraAngle(s.cameraYaw)) > 90 : DEFAULT_SETTINGS.mirror;
   return {
@@ -250,6 +266,7 @@ function parseSettings(raw: unknown): ProjectSettings {
     spriteAxis: (s.spriteAxis as SpriteAxis | undefined) ?? DEFAULT_SETTINGS.spriteAxis,
     cameraRotation: normalizeCameraAngle(isNum(s.cameraRotation) ? s.cameraRotation : DEFAULT_SETTINGS.cameraRotation),
     mirror: isBool(s.mirror) ? s.mirror : legacyMirror,
+    depthLocked: isBool(s.depthLocked) ? s.depthLocked : DEFAULT_SETTINGS.depthLocked,
   };
 }
 
@@ -269,7 +286,7 @@ export function parseProject(text: string): ParseResult {
 export function parseProjectData(data: unknown): ParseResult {
   try {
     if (!isObj(data)) return { ok: false, error: 'Die Datei ist kein gültiges Projekt.' };
-    if (data.version !== 1) return { ok: false, error: 'Das Projekt hat eine nicht unterstützte Version.' };
+    if (data.version !== 1 && data.version !== 2) return { ok: false, error: 'Das Projekt hat eine nicht unterstützte Version.' };
     if (!isObj(data.rig)) return { ok: false, error: 'Rig fehlt im Projekt.' };
 
     const bones = parseBones(data.rig);

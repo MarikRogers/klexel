@@ -9,6 +9,7 @@ import {
   projectHasContent,
   serializeProject,
   toFrameInput,
+  usesDepthChannels,
 } from './project';
 import { makeImageAsset, makePart } from '../test/fixtures';
 import { RIG_TEMPLATES } from './templates/rigs';
@@ -32,7 +33,7 @@ describe('project', () => {
     expect(p.rig).not.toBe(tpl.rig);
     expect(p.rig.bones[0]).not.toBe(tpl.rig.bones[0]);
     expect(p.animations).toEqual([]);
-    expect(p.settings).toEqual({ pixelArt: false, background: '#2b2b2b', spriteAxis: 'down', cameraRotation: 0, mirror: false });
+    expect(p.settings).toEqual({ pixelArt: false, background: '#2b2b2b', spriteAxis: 'down', cameraRotation: 0, mirror: false, depthLocked: false });
   });
 
   it('spriteAxis defaults to down when missing and rejects invalid values', () => {
@@ -118,7 +119,7 @@ describe('project', () => {
   it('rejects invalid input with German message', () => {
     const bad = parseProject('{');
     expect(bad.ok === false && bad.error).toContain('kein gültiges JSON');
-    const v = parseProject('{"version":2}');
+    const v = parseProject('{"version":3}');
     expect(v.ok === false && v.error).toContain('nicht unterstützte Version');
     const r = parseProject('{"version":1,"name":"x"}');
     expect(r.ok === false && r.error).toContain('Rig fehlt');
@@ -303,5 +304,56 @@ describe('ImageAsset.source', () => {
   it('loads old files without source unchanged', () => {
     const r = load(undefined);
     expect(r.ok && 'source' in r.project.images.a).toBe(false);
+  });
+});
+
+describe('depth data in projects', () => {
+  const key = (frame: number, value: number) => ({ frame, value, easing: 'linear' as const });
+
+  function withDepth() {
+    const p = sample();
+    p.animations[0].tracks.thigh_L = { tilt: [key(0, 0), key(6, 40)], depth: [key(0, 3)] };
+    return p;
+  }
+
+  it('depthLocked defaults to false for old files and rejects non-booleans', () => {
+    const raw = JSON.parse(serializeProject(sample()));
+    delete raw.settings.depthLocked;
+    const r = parseProject(JSON.stringify(raw));
+    expect(r.ok && r.project.settings.depthLocked).toBe(false);
+    for (const bad of ['ja', 1, null, {}]) {
+      raw.settings.depthLocked = bad;
+      const out = parseProject(JSON.stringify(raw));
+      expect(!out.ok && out.error).toBe('Ungültige Sperre der Tiefe in den Einstellungen.');
+    }
+  });
+
+  it('round-trips depth keys and the lock', () => {
+    const p = withDepth();
+    p.settings = { ...p.settings, depthLocked: true };
+    const r = parseProject(serializeProject(p));
+    expect(r.ok && r.project.animations[0].tracks.thigh_L).toEqual(p.animations[0].tracks.thigh_L);
+    expect(r.ok && r.project.settings.depthLocked).toBe(true);
+    expect(r.ok && r.project.version).toBe(1);
+  });
+
+  it('writes version 2 only when an animation has depth keys', () => {
+    expect(JSON.parse(serializeProject(withDepth())).version).toBe(2);
+    expect(JSON.parse(serializeProject(sample())).version).toBe(1);
+    const locked = sample();
+    locked.settings = { ...locked.settings, depthLocked: true };
+    expect(JSON.parse(serializeProject(locked)).version).toBe(1);
+  });
+
+  it('usesDepthChannels sees keys of any animation and ignores flat ones', () => {
+    expect(usesDepthChannels(sample())).toBe(false);
+    expect(usesDepthChannels(withDepth())).toBe(true);
+  });
+
+  it('accepts versions 1 and 2 and rejects others', () => {
+    const raw = JSON.parse(serializeProject(sample()));
+    for (const v of [1, 2]) expect(parseProjectData({ ...raw, version: v }).ok).toBe(true);
+    const bad = parseProjectData({ ...raw, version: 3 });
+    expect(!bad.ok && bad.error).toBe('Das Projekt hat eine nicht unterstützte Version.');
   });
 });

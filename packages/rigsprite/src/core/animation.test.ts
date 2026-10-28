@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  channelDefault,
   createAnimation,
   keyedFrames,
   moveBoneKeys,
@@ -119,5 +120,29 @@ describe('sanitizeAnimationPatch', () => {
     expect(sanitizeAnimationPatch({ fps: 500 })).toEqual({ fps: 120 });
     expect(sanitizeAnimationPatch({ fps: 24, length: 30 })).toEqual({ fps: 24, length: 30 });
     expect(sanitizeAnimationPatch({ name: 'n' })).toEqual({ name: 'n' });
+  });
+});
+
+describe('depth channels', () => {
+  const anim = () => createAnimation('t');
+
+  test('tilt, turn and depth default to 0 and are sampled like other channels', () => {
+    expect(channelDefault('tilt')).toBe(0);
+    expect(channelDefault('turn')).toBe(0);
+    expect(channelDefault('depth')).toBe(0);
+    let a = setKey(anim(), 'b', 'tilt', { frame: 0, value: 0, easing: 'linear' });
+    a = setKey(a, 'b', 'tilt', { frame: 10, value: 40, easing: 'linear' });
+    expect(sampleAnimation(a, 5).b).toEqual({ tilt: 20 });
+  });
+
+  test('key editing handles the new channels', () => {
+    let a = setKey(anim(), 'b', 'depth', { frame: 2, value: 5, easing: 'linear' });
+    a = setKey(a, 'b', 'rotation', { frame: 2, value: 1, easing: 'linear' });
+    expect(keyedFrames(a, 'b')).toEqual([2]);
+    const moved = moveBoneKeys(a, 'b', 2, 6);
+    expect(moved.tracks.b.depth).toEqual([{ frame: 6, value: 5, easing: 'linear' }]);
+    expect(moved.tracks.b.rotation![0].frame).toBe(6);
+    expect(removeBoneKeysAt(a, 'b', 2).tracks.b).toBeUndefined();
+    expect(setKeyEasing(a, 'b', 2, 'step').tracks.b.depth![0].easing).toBe('step');
   });
 });

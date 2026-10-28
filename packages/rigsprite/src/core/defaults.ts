@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Readonly<ProjectSettings> = {
   spriteAxis: 'down',
   cameraRotation: 0,
   mirror: false,
+  depthLocked: false,
 };
 
 /** Default distance between the depth layers of the orbit view (px per z rank). */
