@@ -1,7 +1,7 @@
 import { CHANNELS, EASINGS, type Animation, type BoneTrack, type Easing, type Keyframe } from './animation';
 import { DEFAULT_PROJECT_NAME, DEFAULT_SETTINGS, MIN_SOFTNESS } from './defaults';
 import type { FrameInput } from './frame';
-import type { ImageAsset, Part, SpriteAxis } from './part';
+import type { ImageAsset, ImageSource, Part, SpriteAxis } from './part';
 import type { Bone, Rig, RigTemplateId } from './rig';
 import { RIG_TEMPLATES } from './templates/rigs';
 import { normalizeAngle } from './math';
@@ -118,6 +118,20 @@ function parseBones(raw: unknown): Bone[] {
   return bones;
 }
 
+/** A structurally valid link, else undefined (an invalid link never fails the image). */
+function parseSource(v: unknown): ImageSource | undefined {
+  if (!isObj(v)) return undefined;
+  const { projectId, frameId, name, missing } = v;
+  if (!isStr(projectId) || projectId === '') return undefined;
+  if (typeof frameId !== 'number' || !Number.isInteger(frameId) || frameId <= 0) return undefined;
+  if (name !== undefined && !isStr(name)) return undefined;
+  if (missing !== undefined && missing !== true) return undefined;
+  const out: ImageSource = { projectId, frameId };
+  if (name !== undefined) out.name = name;
+  if (missing) out.missing = true;
+  return out;
+}
+
 function parseImage(key: string, v: unknown): ImageAsset {
   if (!isObj(v)) return fail(BAD_IMAGES);
   const s = pick(v, ['id', 'name', 'dataUrl'], isStr);
@@ -127,7 +141,8 @@ function parseImage(key: string, v: unknown): ImageAsset {
   if (!s.dataUrl.startsWith('data:image/')) {
     return fail('Bilder sind ungültig: nur eingebettete Bilddaten (data:image/…) erlaubt.');
   }
-  return { ...s, ...n };
+  const source = parseSource(v.source);
+  return source ? { ...s, ...n, source } : { ...s, ...n };
 }
 
 function parseImages(raw: unknown): Record<string, ImageAsset> {

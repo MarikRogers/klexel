@@ -7,6 +7,15 @@ export interface ImageAsset {
   dataUrl: string;
   width: number;
   height: number;
+  /** Link to a Klexel frame; `name` = frame name last synced, `missing` = source gone (last pixels kept). */
+  source?: ImageSource;
+}
+
+export interface ImageSource {
+  projectId: string;
+  frameId: number;
+  name?: string;
+  missing?: true;
 }
 
 /** Transform of the image centre in the local space of its bone. */

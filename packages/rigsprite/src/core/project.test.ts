@@ -258,3 +258,50 @@ describe('parseProjectData', () => {
     expect(parseProjectData(raw).ok).toBe(false);
   });
 });
+
+describe('ImageAsset.source', () => {
+  const load = (source: unknown) => {
+    const p = createProject('humanoid');
+    p.images.a = makeImageAsset({ id: 'a' });
+    const raw = JSON.parse(JSON.stringify(p));
+    raw.images.a.source = source;
+    return parseProjectData(raw);
+  };
+  const sourceOf = (r: ReturnType<typeof parseProjectData>) => (r.ok ? r.project.images.a.source : 'ERR');
+
+  it('keeps a valid source and round-trips it through serialization', () => {
+    const r = load({ projectId: 'p1', frameId: 3, name: 'Kopf', missing: true });
+    expect(sourceOf(r)).toEqual({ projectId: 'p1', frameId: 3, name: 'Kopf', missing: true });
+    if (!r.ok) throw new Error('x');
+    const again = parseProject(serializeProject(r.project));
+    expect(again.ok && again.project.images.a.source).toEqual({ projectId: 'p1', frameId: 3, name: 'Kopf', missing: true });
+  });
+
+  it('accepts a minimal source', () => {
+    expect(sourceOf(load({ projectId: 'p1', frameId: 1 }))).toEqual({ projectId: 'p1', frameId: 1 });
+  });
+
+  it.each([
+    ['frameId 0', { projectId: 'p', frameId: 0 }],
+    ['fractional frameId', { projectId: 'p', frameId: 1.5 }],
+    ['string frameId', { projectId: 'p', frameId: '1' }],
+    ['missing projectId', { frameId: 1 }],
+    ['empty projectId', { projectId: '', frameId: 1 }],
+    ['non-string name', { projectId: 'p', frameId: 1, name: 5 }],
+    ['missing: false', { projectId: 'p', frameId: 1, missing: false }],
+    ['not an object', 'x'],
+  ])('silently drops an invalid source (%s) and still loads the image', (_n, source) => {
+    const r = load(source);
+    expect(r.ok).toBe(true);
+    expect(sourceOf(r)).toBeUndefined();
+  });
+
+  it('drops extra keys of a valid source', () => {
+    expect(sourceOf(load({ projectId: 'p', frameId: 2, extra: 1 }))).toEqual({ projectId: 'p', frameId: 2 });
+  });
+
+  it('loads old files without source unchanged', () => {
+    const r = load(undefined);
+    expect(r.ok && 'source' in r.project.images.a).toBe(false);
+  });
+});
