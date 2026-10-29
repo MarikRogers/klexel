@@ -13,6 +13,8 @@ export interface Bone {
   softness: number;
   /** Drawn width of the bone in world units (overlay and grab area); absent = automatic from the length. */
   thickness?: number;
+  /** Overlay colour as #rrggbb; absent = default grey-blue. */
+  color?: string;
 }
 
 export interface Rig {

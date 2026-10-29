@@ -370,3 +370,17 @@ describe('depth data in projects', () => {
     expect(!bad.ok && bad.error).toBe('Das Projekt hat eine nicht unterstützte Version.');
   });
 });
+
+describe('Knochen-Darstellung (Dicke, Farbe)', () => {
+  it('bleibt beim Speichern und Laden erhalten; ungültige Werte werden verworfen', () => {
+    const p = createProject('humanoid', 'Test');
+    p.rig.bones[0] = { ...p.rig.bones[0], thickness: 9, color: '#ff8800' };
+    p.rig.bones[1] = { ...p.rig.bones[1], thickness: -3, color: 'rot' };
+    const r = parseProject(serializeProject(p));
+    if (!r.ok) throw new Error(r.error);
+    const back = r.project;
+    expect(back.rig.bones[0]).toMatchObject({ thickness: 9, color: '#ff8800' });
+    expect(back.rig.bones[1].thickness).toBeUndefined();
+    expect(back.rig.bones[1].color).toBeUndefined();
+  });
+});

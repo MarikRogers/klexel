@@ -15,6 +15,13 @@ const BASE_OFFSET = 0.15;
 const JOINT_RADIUS_PX = { normal: 3, selected: 4 };
 const LINE_WIDTH_PX = { normal: 1, selected: 2 };
 
+/** `#rrggbb` as an rgba() string, or null if it is not a valid colour. */
+function hexAlpha(hex: string | undefined, alpha: number): string | null {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 /** Draws each bone as a screen-space triangle from origin to tip, selection highlighted (drawn last). */
 export function drawOverlay(
   ctx: CanvasRenderingContext2D,
@@ -44,8 +51,9 @@ export function drawOverlay(
     const bx = o.x + dx * BASE_OFFSET;
     const by = o.y + dy * BASE_OFFSET;
 
-    ctx.fillStyle = selected ? SELECTED_FILL : BONE_FILL;
-    ctx.strokeStyle = selected ? SELECTED_STROKE : BONE_STROKE;
+    // A bone colour tints the (semi-transparent) body; the selection keeps its orange outline
+    ctx.fillStyle = hexAlpha(bone.color, selected ? 0.65 : 0.45) ?? (selected ? SELECTED_FILL : BONE_FILL);
+    ctx.strokeStyle = selected ? SELECTED_STROKE : (hexAlpha(bone.color, 0.95) ?? BONE_STROKE);
     ctx.lineWidth = selected ? LINE_WIDTH_PX.selected : LINE_WIDTH_PX.normal;
     ctx.beginPath();
     ctx.moveTo(o.x, o.y);

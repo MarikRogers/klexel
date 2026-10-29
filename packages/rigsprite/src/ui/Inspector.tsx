@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { autoThickness, boneById } from '../core/rig';
 import { isBoneNameTaken, useEditor } from '../state/store';
 import { CommitInput, parseNumber } from './CommitInput';
@@ -48,6 +48,21 @@ function NameField({ boneId, name }: { boneId: string; name: string }) {
   );
 }
 
+/** Colour picker that commits once when the picker closes (native `change`), not on every drag step. */
+function ColorInput({ value, onCommit }: { value: string; onCommit: (c: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const commit = useRef(onCommit);
+  commit.current = onCommit;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const on = () => commit.current(el.value);
+    el.addEventListener('change', on);
+    return () => el.removeEventListener('change', on);
+  }, []);
+  return <input ref={ref} type="color" aria-label="Farbe" defaultValue={value} />;
+}
+
 export function Inspector() {
   // Only the selected bone / part: edits elsewhere in the project do not re-render the inspector.
   const bone = useEditor((s) => boneById(s.project.rig, s.selectedBoneId));
@@ -73,6 +88,11 @@ export function Inspector() {
             value={bone.thickness ?? autoThickness(bone)}
             onCommit={(v) => updateBone(bone.id, { thickness: v })}
           />
+          <label className="field">
+            <span>Farbe</span>
+            <ColorInput key={`${bone.id}:${bone.color ?? ''}`} value={bone.color ?? '#c8d2e6'} onCommit={(c) => updateBone(bone.id, { color: c })} />
+            {bone.color && <button onClick={() => updateBone(bone.id, { color: undefined })}>Standard</button>}
+          </label>
           <NumberField
             label="Gelenk-Weichheit"
             value={bone.softness}

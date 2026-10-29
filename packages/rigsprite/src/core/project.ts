@@ -119,6 +119,7 @@ function parseBone(b: unknown): Bone {
   const bone: Bone = { id: s.id, name: s.name, parentId, ...n };
   // Optional display width; an invalid value is dropped (the bone keeps its automatic width).
   if (isNum(b.thickness) && b.thickness > 0) bone.thickness = b.thickness;
+  if (isStr(b.color) && /^#[0-9a-fA-F]{6}$/.test(b.color)) bone.color = b.color;
   return bone;
 }
 
