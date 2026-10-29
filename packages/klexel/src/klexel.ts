@@ -90,6 +90,7 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
         <button data-tool="rect" title="Rechteck">▭</button>
         <button data-tool="ellipse" title="Ellipse">◯</button>
         <button id="fillMode" title="Umriss / gefüllt" hidden>▢</button>
+        <label id="brushWrap" class="brush" title="Pinselgröße">Ø <input id="brushSize" type="range" min="1" max="16" value="1" /><output id="brushOut">1</output></label>
         <button data-tool="picker" title="Pipette">${ICON.picker}</button>
         <button id="custom" title="Eigene Farbe">🎨</button>
         <input id="colorInput" type="color" hidden />
@@ -111,7 +112,8 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
   let doc = new PixelDocument(32, 32);
   let history = new History(doc);
   let view = new Viewport(canvas, doc);
-  const stroke = new FreehandStroke(() => history, () => settings.pixelPerfect);
+  const stroke = new FreehandStroke(() => history, () => settings.pixelPerfect, () => brushSize);
+  let brushSize = 1;
   let palette: Color[] = [...PICO8];
   let color: Color = palette[8];
   let tool: ToolName = 'pen';
@@ -524,10 +526,15 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
       precision.setTool(tool);
       root.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
       $('fillMode').hidden = !(tool === 'rect' || tool === 'ellipse');
+      $('brushWrap').hidden = !(tool === 'pen' || tool === 'eraser');
       selectionBar.setVisible(tool === 'select');
       refresh();
     };
   });
+  $<HTMLInputElement>('brushSize').oninput = e => {
+    brushSize = Number((e.currentTarget as HTMLInputElement).value) || 1;
+    $('brushOut').textContent = String(brushSize);
+  };
   $('fillMode').onclick = e => {
     filledShapes = !filledShapes;
     (e.currentTarget as HTMLElement).textContent = filledShapes ? '◼' : '▢';

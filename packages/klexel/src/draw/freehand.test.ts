@@ -102,4 +102,14 @@ describe('FreehandStroke', () => {
     stroke.end(false);
     expect(stroke.active).toBe(false);
   });
+
+  it('brush size stamps a square around the point and clips at the edge', () => {
+    const doc = new PixelDocument(8, 8);
+    const history = new History(doc);
+    const stroke = new FreehandStroke(() => history, () => true, () => 3);
+    stroke.begin(); stroke.point(0, 0, 9); stroke.end(true);
+    const cel = doc.cel(doc.activeId, doc.currentFrameId)!;
+    expect(cel.reduce((n, v) => n + (v ? 1 : 0), 0)).toBe(4);
+    expect(cel[1 * 8 + 1]).toBe(9);
+  });
 });
