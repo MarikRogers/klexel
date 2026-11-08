@@ -61,6 +61,63 @@ export function readPico8(text: string): ImportedSheet {
   return { target: 'pico8', sprites };
 }
 
+/**
+ * Liest ein `pxu`-Bitmap (nach dem Präfix `pxu\0`): Flags (u16: Typ 0xf, Höhe 0x40, lange Größen 0x800,
+ * Kompression 0xf000: 1 = roh, 2 = Move-to-front), Breite, Höhe, dann je Pixel ein Byte (u8).
+ * Aufbau nach der Referenzimplementierung shrinko8 (picotron_fs.py).
+ */
+function readPxu(b: Uint8Array, at: number): { w: number; h: number; data: Uint8Array; next: number } {
+  const bad = () => new Error('Beschädigtes oder nicht unterstütztes Picotron-Bitmap');
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let p = at;
+  if (p + 2 > b.length) throw bad();
+  const flags = dv.getUint16(p, true); p += 2;
+  const type = flags & 0xf, hasH = (flags & 0x40) !== 0, long = (flags & 0x800) !== 0, comp = flags >> 12;
+  if (type !== 3) throw new Error('Nur 8-Bit-Bitmaps (u8) werden unterstützt');
+  const num = (): number => {
+    if (long) { if (p + 4 > b.length) throw bad(); const v = dv.getUint32(p, true); p += 4; return v; }
+    if (p + 1 > b.length) throw bad();
+    return b[p++];
+  };
+  const w = num(), h = hasH ? num() : 1;
+  const size = w * h;
+  if (w < 1 || h < 1 || size > 1 << 20) throw bad();
+  const data = new Uint8Array(size);
+  if (comp === 1) {
+    if (p + size > b.length) throw bad();
+    data.set(b.subarray(p, p + size)); p += size;
+  } else if (comp === 2) {
+    const bits = b[p++];
+    if (bits !== 4) throw bad();
+    const mask = (1 << bits) - 1, ext = 1 << (8 - bits);
+    const mapping = Array.from({ length: mask }, (_, i) => i);
+    const mtf = Array.from({ length: mask }, (_, i) => i);
+    let n = 0;
+    while (n < size) {
+      if (p >= b.length) throw bad();
+      const c = b[p++];
+      const index = c & mask;
+      let value: number;
+      if (index === mask) {
+        if (p >= b.length) throw bad();
+        value = b[p++];
+        mapping[mtf[mtf.length - 1]] = value; // ersetzt den am längsten ungenutzten Platz
+      } else {
+        const pos = mtf.indexOf(index);
+        for (let i = pos; i > 0; i--) mtf[i] = mtf[i - 1];
+        mtf[0] = index;
+        value = mapping[index];
+      }
+      let count = 1 + (c >> bits);
+      if (count === ext) {
+        for (;;) { if (p >= b.length) throw bad(); const x = b[p++]; count += x; if (x !== 0xff) break; }
+      }
+      for (let i = 0; i < count && n < size; i++) data[n++] = value;
+    }
+  } else throw new Error('Nicht unterstützte Kompression im Picotron-Bitmap');
+  return { w, h, data, next: p };
+}
+
 /** Liest eine Picotron-`.gfx` (Pod-Kopf, ggf. LZ4-Container, Lua-Tabelle mit `bmp=`-Einträgen). */
 export function readPicotron(bytes: Uint8Array): ImportedSheet {
   const head = latin.decode(bytes.subarray(0, Math.min(bytes.length, 512)));
@@ -88,11 +145,8 @@ export function readPicotron(bytes: Uint8Array): ImportedSheet {
     const d = at + 4;
     let w = 0, h = 0, data: Uint8Array | null = null, next = d;
     if (text.startsWith('pxu\0', d)) {
-      const type = body[d + 4], flags = body[d + 5];
-      w = body[d + 6]; h = body[d + 7];
-      if (type !== 0x43 || flags !== 0x10) throw new Error('Komprimierte Picotron-Bitmaps werden nicht unterstützt');
-      data = body.subarray(d + 8, d + 8 + w * h);
-      next = d + 8 + w * h;
+      const px = readPxu(body, d + 4);
+      w = px.w; h = px.h; data = px.data; next = px.next;
     } else {
       const u = /^userdata\("u8",\s*(\d+),\s*(\d+),\s*"([0-9a-fA-F]*)"\)/.exec(text.slice(d, d + 20 + 128 * 128 * 2));
       if (u) {

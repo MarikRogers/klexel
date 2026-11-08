@@ -77,3 +77,24 @@ describe('Picotron-Import', () => {
     expect(() => readConsoleFile(new TextEncoder().encode('hallo'))).toThrow();
   });
 });
+
+describe('Picotron-Import: komprimierte Bitmaps (pxu, Move-to-front)', () => {
+  // Echte Daten aus einer von Picotron gespeicherten 0.gfx: 16×16, ein „X“ in Farbe 7
+  const bmp = [0x70, 0x78, 0x75, 0x00, 0x43, 0x20, 0x10, 0x10, 0x04,
+    0xf0, 0x56, 0x07, 0x10, 0x07, 0xc0, 0x17, 0xd0, 0x17, 0xc0, 0x07, 0x10, 0x07, 0xf0, 0x56];
+  const file = Uint8Array.from([
+    ...new TextEncoder().encode('--[[pod,created="2025-01-17 10:35:48",revision=19]]{[0]={bmp='),
+    ...bmp, ...new TextEncoder().encode(',flags=0,pan_x=0,pan_y=0,zoom=8}}'),
+  ]);
+
+  it('entpackt das Bitmap zu den richtigen Pixeln', () => {
+    const s = readPicotron(file);
+    expect(s.sprites).toHaveLength(1);
+    const { w, h, indices } = s.sprites[0];
+    expect([w, h]).toEqual([16, 16]);
+    expect([...indices].reduce((n, v) => n + (v === 7 ? 1 : 0), 0)).toBe(8);
+    expect(indices[6 * 16 + 6]).toBe(7);
+    expect(indices[6 * 16 + 9]).toBe(7);
+    expect(indices[0]).toBe(0);
+  });
+});
