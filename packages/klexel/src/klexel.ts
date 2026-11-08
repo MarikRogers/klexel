@@ -21,6 +21,7 @@ import { createSelectionBar } from './ui/selectionBar';
 import { shortcutFor, selectionShortcutFor, isTypingTarget } from './ui/shortcuts';
 import { createAboutDialog } from './ui/aboutDialog';
 import { createPhotoDialog } from './ui/photoDialog';
+import { createConsoleImportDialog } from './ui/consoleImportDialog';
 import { createShareDialog } from './ui/shareDialog';
 import { createLinkOpenDialog } from './ui/linkOpenDialog';
 import { readShareLink } from './share/link';
@@ -75,6 +76,7 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
         <button id="new" title="Neu">＋</button>
         <button id="import" title="PNG laden">⤒</button>
         <button id="photo" title="Foto laden">🖼</button>
+        <button id="consoleImport" title="PICO-8 / Picotron laden">👾</button>
         <button id="share" title="Link teilen">🔗</button>
         <button id="export" title="PNG speichern">⤓</button>
       </div>
@@ -103,7 +105,8 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
       <div class="row"><button value="cancel">Abbrechen</button><button value="ok">Anlegen</button></div>
     </form></dialog>
     <input id="file" type="file" accept="image/png" hidden />
-    <input id="photoFile" type="file" accept="image/*" hidden />`;
+    <input id="photoFile" type="file" accept="image/*" hidden />
+    <input id="consoleFile" type="file" accept=".p8,.gfx" hidden />`;
 
   const $ = <T extends HTMLElement>(id: string) => root.querySelector('#' + id) as T;
   const canvas = app.querySelector('canvas')!;
@@ -603,6 +606,18 @@ export function mountKlexel(root: HTMLElement, host: AreaHost): AreaHandle<Saved
     const f = input.files?.[0];
     input.value = '';
     if (f) await photoDlg.open(f);
+  };
+  // "Konsolenimport": PICO-8 (.p8) / Picotron (.gfx) laden (ersetzt nach Rückfrage das aktuelle Bild)
+  const consoleImportDlg = createConsoleImportDialog({
+    getDoc: () => doc,
+    onApply: d => { attach(d); scheduleSave(); },
+  });
+  $('consoleImport').onclick = () => { settleSelection(); $('consoleFile').click(); };
+  $<HTMLInputElement>('consoleFile').onchange = async e => {
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0];
+    input.value = '';
+    if (f) await consoleImportDlg.open(f);
   };
   // "Link teilen": das Bild als Link (Bild im Teil nach #) verschicken
   const shareDlg = createShareDialog({
